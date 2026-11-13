@@ -1,9 +1,9 @@
 # Rework Plan v2 — A Native 3DS Visual Novel Engine and Converter
 
-> Status: v2, 2026-11-13. Replaces v1 of this document (same file). v1
+> Status: v2.1, 2026-11-13. Replaces v1 of this document (same file). v1
 > assumed a LÖVE Potion runtime; the engine is now native C, so every feature
-> has been re-planned around what the hardware can actually do. Project name
-> is pending a rebrand (§16); "the engine" and "the converter" are used
+> has been re-planned around what the hardware can actually do. v2.1 adds
+> D18–D22. "The engine" (Enchantment) and "the converter" (Witch) are used
 > throughout.
 
 ## 0. Decision log
@@ -14,8 +14,8 @@ Settled:
 |---|---|---|
 | D1 | Rework approved, with plan re-reviews after H (hardware spike) and R3 (Jisei on hardware) | §15 |
 | D2 | Original VNDS scripts are not read by the engine; VNDS becomes a converter source | ADR-004 |
-| D3 | **Native C engine** (citro3d/ctrulib/ndsp) with a desktop backend for testing. LÖVE Potion and MoonScript are dropped | ADR-005 (to write), §3 |
-| D4 | All of a game's languages go into one bundle, switchable in settings | §6.10 |
+| D3 | **Native C engine** (citro3d/ctrulib/ndsp) with a desktop backend for testing. LÖVE Potion and MoonScript are dropped | ADR-005, §3 |
+| D4 | All of a game's languages go into one bundle, switchable in settings | §8.10 |
 | D5 | Framing: nothing PC-visible is ever lost, one uniform camera, fit by default, tighter only when provably lossless, crops only by explicit opt-in | §9 |
 | D6 | Dual screen: the top screen is the stage, the bottom screen is the reader and controls | §10 |
 | D7 | Top-screen 800×240 wide mode used wherever it improves the picture | §9.3 |
@@ -146,8 +146,9 @@ shaders"**. The fixed-function stage plus render targets covers almost every
     (§13).
 - **The bundle** is the only contract: node graph, compiled logic, a
   displayable/ATL/screen/style database, and assets, in a binary format read
-  with zero parsing on the 3DS: memory-mapped tables plus string pools, loaded
-  per chunk on demand. Schema in ADR-006 (to write).
+  with zero parsing on the 3DS: fixed-layout tables plus string pools, read
+  per chunk on demand and used in place (the 3DS can't memory-map files on
+  the SD card). Schema in ADR-007 (to write, R0).
 
 ## 5. Ren'Py front end: the harvester
 
@@ -211,7 +212,7 @@ has been ported to the 3DS before, e.g. LiquidFenrir's `3dspython`).
     - `renpy.show/hide/scene/with_statement/pause/say/jump/call/return_statement`
     - `call_screen/show_screen/hide_screen`, `music.*/sound.*`
     - `notify`, `random`, `showing`, `get_attributes`, `restart_interaction`,
-      `input`, `notify`, `get_screen`, `seen_label/seen_image`, …
+      `input`, `get_screen`, `seen_label/seen_image`, …
     - Displayable constructors: `Image`, `Solid`, `Frame`, `Fixed`,
       `Composite`/`LiveComposite`, `Transform`, `ConditionSwitch`,
       `DynamicDisplayable`, `LayeredImage`, `Text`, `im.*`, `Movie`, …
@@ -420,9 +421,12 @@ Script chunks load per source file or label range and unload when cold.
 
 - **Glyph atlases baked on the PC** with FreeType, using the game's own fonts,
   sizes, hinting, outlines, shadows and kerning, as Ren'Py renders them.
-  - Coverage: every character in the script, in every language, plus
-    everything the system keyboard can produce for name entry.
-  - Missing glyphs fall back to the 3DS shared system font (with CJK).
+  - Coverage: every character in the script and its translations, in every
+    language.
+  - Anything outside the atlases, such as a name typed on the system
+    keyboard, falls back to the 3DS shared system font (with CJK). Baking
+    everything the keyboard can type would mean tens of thousands of CJK
+    glyphs per size.
   - Each atlas is sized for the actual on-screen size (bottom screen at 1:1;
     top-screen text at its camera scale, and at 800×240 in wide mode), so
     text is always crisp.
@@ -529,8 +533,11 @@ extractors:
   formats:**
   - Live2D: `motion3.json` (linear/bezier/stepped curves, fades, loops),
     `exp3.json` (add/multiply/overwrite), `physics3.json` (the pendulum
-    algorithm, documented in Live2D's open Framework), `pose3.json`, eye
-    blink, breathing, lip sync.
+    algorithm), `pose3.json`, eye blink, breathing, lip sync.
+  - These are written from the formats' documented behavior and checked
+    against the oracle. Live2D's Cubism Framework is under the Live2D Open
+    Software License, not MIT, so none of its code is copied; its license is
+    reviewed before R7 starts.
   - Rendering: Cubism blend modes, clipping masks via stencil, and
     multiply/screen colors via TEV stages.
   - Ren'Py's own Live2D layer (`renpy/gl2/live2d.py`: attributes mapped to
