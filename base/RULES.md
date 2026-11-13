@@ -50,9 +50,9 @@ queue and its decision log overrides older decisions where they differ.
 8. **Never silently drop or miscompile an unsupported construct.** Every
    unsupported construct must produce a Problem Report entry with its source
    location, the source snippet, a message and a suggestion.
-9. **Witch must exit non-zero if the bundle verifier fails** or any reachable
-   crash/stuck item exists (`docs/REWORK-PLAN.md` §13). This gates build scripts
-   and CI.
+9. **Witch must exit non-zero if the bundle verifier fails**: a damaged bundle,
+   or any reachable crash, stuck or missing-content item (`docs/REWORK-PLAN.md`
+   §13). This gates build scripts and CI.
 10. **DLC and multi-engine front ends follow the same merge-at-convert-time model**
     (spec §8.1) — no runtime DLC/engine-detection logic in Enchantment.
 

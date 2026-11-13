@@ -67,11 +67,11 @@ make those failures detectable before a bundle ever reaches the device.
    nothing: until Enchantment reads bundles (R3), any change is allowed and
    bundles are simply reconverted.
 9. **The verifier gates every bundle.** `python -m witch verify` checks the
-   structure (bounds, references, sorting, string offsets) and then the
-   meaning (missing labels, unknown kinds, missing images and assets, asset
-   paths that collide when case is ignored, as FAT32 and Windows ignore it),
-   and writes Problem Report v2 (`REWORK-PLAN` §13.2). It exits non-zero on
-   any crash or stuck problem a player can reach.
+   structure (bounds, references, sorting and duplicates, string offsets)
+   and then the meaning (missing labels, statements and displayables the
+   engine can't run, missing images and assets), and writes Problem Report
+   v2 (`REWORK-PLAN` §13.2). It exits non-zero on any damage to the format
+   and on any crash, stuck or missing-content problem a player can reach.
 
 ## Consequences
 
@@ -80,7 +80,7 @@ make those failures detectable before a bundle ever reaches the device.
 - Any change to the schema shows up as a diff in the generated header and
   fails to compile on whichever side disagrees.
 - Paths keep the game's own directory tree, so name collisions can't happen
-  by construction; the verifier still checks for case-only collisions.
+  by construction; the verifier still rejects a path listed twice.
 - Two fields of every node are references, so a bad reference can't crash
   the engine silently: the verifier rejects any out-of-range one first.
 - Python payloads and displayable trees beyond plain images are filled in by
