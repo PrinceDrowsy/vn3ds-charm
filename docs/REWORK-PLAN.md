@@ -781,6 +781,20 @@ until R6 reaches parity.
 Then the front ends in §14 order: VNDS, KiriKiri (with E-mote), RealLive,
 CatSystem2.
 
+**Release milestone: Universal-DB listing.** Once Enchantment plays converted
+games end to end (R4 at the earliest), publish a GitHub release and submit
+the repo through Universal-DB's app request form.
+- **What gets listed:** the library build of Enchantment (`.3dsx`/`.cia`,
+  which plays `.charm` bundles from the SD card), with Witch linked as the PC
+  tool that makes them.
+- **Release assets:** the form expects direct `.3dsx`/`.cia` files attached to
+  the release; archives need the `archive` tag added by hand.
+- **Never in a release:** `.charm` bundles or per-game CIAs, which contain the
+  original games' content.
+- **Before submitting:** check Universal-DB's guidelines against how Witch is
+  described (converting games the player owns), and write the listing's
+  description and screenshots from a public-domain or self-made test novel.
+
 ## 16. Rebrand
 
 Decided (D17, ADR-006), on a love-magic theme:
