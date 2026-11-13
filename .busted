@@ -1,0 +1,13 @@
+-- Project busted config -- lets `busted` (run from the repo root) find
+-- src/engine/'s modules and fix the stale-package.moonpath issue
+-- documented in tests/engine/busted_helper.lua, without needing to pass
+-- --lpath/--helper by hand every time.
+return {
+  _all = {
+    lpath = "src/engine/?.lua;src/engine/?/init.lua;src/engine/?.moon;src/engine/?/init.moon",
+    helper = "tests/engine/busted_helper.lua",
+  },
+  default = {
+    ROOT = { "tests/engine" },
+  },
+}

@@ -1,0 +1,75 @@
+name: AI Task
+description: A scoped task suitable for agent execution
+title: "[AI] "
+labels:
+  - ai:triage
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should be true when this is complete?
+    validations:
+      required: true
+
+  - type: textarea
+    id: source-docs
+    attributes:
+      label: Source docs
+      description: Link PRD, ADRs, CONTEXT.md sections, or planning docs.
+      placeholder: |
+        - VN3DS-spec.md
+        - docs/ai/...
+        - docs/adr/...
+        - CONTEXT.md
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What is included?
+    validations:
+      required: true
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: What must the agent not change?
+    validations:
+      required: true
+
+  - type: textarea
+    id: commands
+    attributes:
+      label: Required commands
+      value: |
+        dotnet restore
+        dotnet build
+        dotnet test
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Done criteria
+      value: |
+        - Build passes.
+        - Tests pass.
+        - No unrelated formatting changes.
+        - PR references this issue with Fixes #ISSUE_NUMBER.
+        - Agent summary explains what changed and how it was tested.
+    validations:
+      required: true
+
+  - type: textarea
+    id: failure
+    attributes:
+      label: Failure behavior
+      value: |
+        If blocked after two repair attempts, stop work, comment with the exact blocker, and apply ai:blocked.
+    validations:
+      required: true

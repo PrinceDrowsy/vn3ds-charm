@@ -1,0 +1,5 @@
+bgload bg.t3x 0
+text Hello, VN3DS-CHARM!
+text This is the Phase 0 dual-screen spike.
+text Tap or press A to continue.
+choice Option A|Option B

@@ -1,0 +1,6 @@
+bgload bg.t3x 0
+setimg sprite1.t3x 31 25
+setimg sprite2.t3x 391 188
+music stream.ogg -1
+text Stress test: ETC1 background, two ETC1A4 sprites, and streamed OGG playing simultaneously.
+text If you can read this without a crash, freeze, or audio stutter, the O3DS baseline is holding.

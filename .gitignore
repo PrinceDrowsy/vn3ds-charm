@@ -1,0 +1,35 @@
+# Build output
+bin/
+obj/
+.vs/
+.vscode/
+
+# User files
+*.user
+*.suo
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment/secrets
+.env
+.env.*
+appsettings.Development.json
+secrets.json
+
+# Node, if this project later uses it
+node_modules/
+dist/
+build/
+
+# Hermes/agent artifacts
+.hermes-tmp/
+artifacts/
+agent-output/
+# Python caches
+__pycache__/
+*.py[cod]
