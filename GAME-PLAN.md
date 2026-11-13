@@ -1,8 +1,9 @@
 ## Project Mode: BUILD
 
-> Planned cutover: end of Phase 2 (Hustle Cat playable end-to-end). At that point
-> the core converter+engine pipeline is proven on two real games, and remaining
-> work (Phases 3+) becomes incremental per-feature/per-game work well-suited to
+> Planned cutover: end of rework phase R4 (Jisei, Mice Tea and Life After Magic
+> playable end to end on Enchantment). At that point Witch and Enchantment are
+> proven on three real games, and the remaining work (R5 onward, new front ends,
+> new ports) becomes incremental per-feature/per-game work well-suited to
 > issue-sliced, Ralph-loop execution. See `orchestrator/CUTOVER.md` for the
 > handoff checklist. This marker is only changed by the Orchestrator at cutover,
 > or manually by a human.

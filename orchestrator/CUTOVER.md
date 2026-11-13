@@ -6,31 +6,32 @@
 
 ## This project's planned cutover point
 
-**End of Phase 2** (Hustle Cat playable end-to-end, Old 3DS profile, Azahar).
-This is pre-marked in the header comment at the top of `GAME-PLAN.md`.
+**End of rework phase R4** (`docs/REWORK-PLAN.md` §15): Jisei, Mice Tea and
+Life After Magic play end to end on Enchantment on Old 3DS hardware. This is
+pre-marked in the header comment at the top of `GAME-PLAN.md`.
 
-Rationale: by the end of Phase 2, the converter+engine pipeline will have been
-proven on two real games (Jisei in Phase 1, Hustle Cat in Phase 2) across the
-full core feature set — parsing, conversion, Problem Report, dual-screen
-rendering, expression evaluation, save/load, and audio. Everything from Phase 3
-onward (animation system, Live2D replacement, additional game ports, Phase 6
-multi-engine converters) is naturally incremental and independently verifiable
-— each is its own sliceable unit of work well suited to issue-based, overnight
-Ralph-loop execution, rather than requiring the coordinating factory loop's
+Rationale: by the end of R4, Witch and Enchantment will have been proven on
+three real games across the whole core: harvest, logic, scene, rendering,
+text, audio, saves and rollback, displayables and framing. Everything after
+(the full screen runtime and dual-screen layouts, video, puppets, packaging,
+new front ends, new ports) is incremental and independently verifiable. Each
+is its own sliceable unit of work, well suited to issue-based, overnight
+Ralph-loop execution, rather than needing the coordinating factory loop's
 whole-picture view.
 
 This is a plan, not an automatic trigger — the Orchestrator (or a human) still
 evaluates the actual state of the project against the checklist below when
-Phase 2's exit criteria are met, rather than cutting over blindly on a date.
+R4's exit criteria are met, rather than cutting over blindly on a date.
 
 ## Cutover checklist (Orchestrator performs)
 
 1. **Confirm green baseline.**
-   - Converter `pytest` suite green; Engine `busted` suite green.
-   - Hustle Cat's definition-of-done (`VN3DS-spec.md` §11.2) fully checked.
-   - Memory in use stays under 70MB throughout an Azahar Old 3DS profile
-     playthrough of at least one full Hustle Cat route.
-   - `GAME-PLAN.md` / `PHASES.md` checkboxes for Phases 0–2 match reality.
+   - Witch's and Enchantment's test suites green; the bundle verifier passes
+     on all three games' bundles.
+   - R4's exit criteria (`docs/REWORK-PLAN.md` §15) met.
+   - Memory stays within the §11 budgets on Old 3DS throughout a full
+     playthrough of each of the three games, measured on hardware.
+   - `GAME-PLAN.md` / `PHASES.md` checkboxes match reality.
 
 2. **Confirm the maintenance workflow docs exist.**
    - `docs/ai/agent-workflow.md` already exists in this project (pre-dates the
@@ -44,7 +45,8 @@ Phase 2's exit criteria are met, rather than cutting over blindly on a date.
      Phase 3+ work items get sliced into issues.
 
 3. **Generate the initial issue backlog from remaining plan items.**
-   - For every unchecked item in Phases 3, 4, 5, 5.5, and 6 (a–e) in
+   - For every unchecked item in rework phases R5–R9 and the front ends after
+     them (`docs/REWORK-PLAN.md` §14–15), plus any still-relevant item in
      `GAME-PLAN.md`, create a GitHub Issue.
    - Use `to-issues` / `prd-to-issues` if available, referencing
      `VN3DS-spec.md`'s relevant section and the `GAME-PLAN.md` item.
@@ -61,8 +63,8 @@ Phase 2's exit criteria are met, rather than cutting over blindly on a date.
      `## Project Mode: MAINTENANCE (cutover: <YYYY-MM-DD>)`
 
 5. **Log the cutover.**
-   - Append a cutover note to `learning/METRICS-HISTORY.md`: date, final Phase
-     0–2 metrics, number of issues generated, first batch marked `ai:ready`+`ai:afk`.
+   - Append a cutover note to `learning/METRICS-HISTORY.md`: date, final
+     R0–R4 metrics, number of issues generated, first batch marked `ai:ready`+`ai:afk`.
 
 6. **Stop driving.**
    - The Orchestrator stops running BUILD cycles against this tree. The Ralph
@@ -72,7 +74,7 @@ Phase 2's exit criteria are met, rather than cutting over blindly on a date.
 
 - `GAME-PLAN.md` remains as the historical build record and mode marker; it is
   no longer the work queue.
-- New work (Phase 3+ items, bug fixes, new game ports) is filed as issues,
+- New work (R5+ items, bug fixes, new game ports) is filed as issues,
   grilled/sliced as needed, labelled, and picked up by the Ralph loop.
 - If a large new BUILD-mode push is ever needed again (e.g. the Phase 5.5
   Triage Workbench turns out to need cross-cutting factory-style coordination),

@@ -10,13 +10,18 @@
 > generic factory mechanics are inherited from the template's design.
 > Full technical detail lives in `VN3DS-spec.md` — this file is the
 > factory-facing summary.
+>
+> **The rework in `docs/REWORK-PLAN.md` is the active queue.** Its decision
+> log overrides `VN3DS-spec.md`, `base/ARCHITECTURE.md` and the `stack/` docs
+> wherever they still describe the old LÖVE Potion/MoonScript pipeline; those
+> are rewritten in rework phase R9.
 
 ## System Overview
 
 VN3DS-CHARM uses a multi-agent autonomous development loop. Multiple specialized
-agents collaborate to build a two-part toolchain — a Python Converter and a
-MoonScript/Lua Engine (LÖVE Potion, 3DS) — each agent constrained to its role,
-looping until acceptance criteria are met.
+agents collaborate to build a two-part toolchain — Witch, a Python converter,
+and Enchantment, a native C engine for 3DS with embedded MicroPython — each
+agent constrained to its role, looping until acceptance criteria are met.
 
 **The three primitives that govern every cycle:**
 1. **Editable Asset** — `/src` (converter, engine, triage-ui) and `/tests`
@@ -34,7 +39,7 @@ base/                   ← Layer 1: WHAT to build (immutable during runs)
 
 stack/                  ← Layer 2: WITH WHAT to build
   STACK-CONVERTER.md    ← Python converter: parser, emitters, asset pipeline
-  STACK-ENGINE.md       ← MoonScript→Lua engine: LÖVE Potion, toolchain, budgets
+  STACK-ENGINE.md       ← old MoonScript engine (frozen; rewritten for C in R9)
   STACK-TRIAGE-UI.md    ← Python Triage Workbench (Phase 5.5+)
   STACK-TESTING.md      ← pytest (converter) + busted (engine), regression corpora
 
@@ -52,14 +57,16 @@ learning/               ← Layer 4: REMEMBER across cycles
 
 orchestrator/           ← Loop control and evaluation logic
   PLANNING.md           ← Phase P: grill-first planning (already complete for this project)
-  CUTOVER.md            ← BUILD → MAINTENANCE handoff (pre-marked for end of Phase 2)
+  CUTOVER.md            ← BUILD → MAINTENANCE handoff (pre-marked for end of rework phase R4)
   loop-config.md        ← Loop parameters: max cycles, metric thresholds
   SKILLS-DISCOVERY.md   ← Phase 0: find and install relevant skills
 
 src/                    ← Production code (agent WRITE target)
-  converter/            ← Python converter
-  engine/               ← MoonScript source (compiles to Lua) — see STACK-ENGINE.md
+  converter/            ← Python converter (old pipeline, frozen; Witch replaces it)
+  engine/               ← MoonScript engine (old pipeline, frozen; removed in R9)
   triage-ui/            ← Python Triage Workbench (Phase 5.5+, not yet scaffolded)
+                          Witch's and Enchantment's own directories are laid out
+                          in R0 (bundle schema) and R3 (engine core).
 
 tests/                  ← Test code (Tester WRITE target)
   security-reports/     ← Security agent output directory
@@ -97,9 +104,10 @@ orchestrator MUST reject that cycle's output and revert the change.
 `GAME-PLAN.md`. `GAME-PLAN.md` / `PHASES.md` is canonical; GitHub Issues are NOT
 the queue yet.
 
-**Planned cutover: end of Phase 2** (Hustle Cat playable end-to-end). At that
-point the converter+engine pipeline is proven on two real games, and Phases 3+
-become incremental per-feature/per-game work suited to issue-sliced execution.
+**Planned cutover: end of rework phase R4** (Jisei, Mice Tea and Life After
+Magic playable end to end on Enchantment). At that point Witch and Enchantment
+are proven on three real games, and R5 onward becomes incremental
+per-feature/per-game work suited to issue-sliced execution.
 See `orchestrator/CUTOVER.md` for the full trigger and checklist. The cutover is
 Orchestrator-only; no teammate agent flips the mode marker.
 
@@ -114,17 +122,17 @@ P. **PLAN THE PROJECT** (Phase P) — **Already complete for this project.**
 0. **DISCOVER** (Phase 0, once) — Search skills registries for Python/MoonScript/
    Lua/LÖVE Potion relevant skills. Install approved skills. See
    `orchestrator/SKILLS-DISCOVERY.md`.
-1. **PLAN** — Orchestrator reads `base/PROJECT.md` + `base/ARCHITECTURE.md` +
+1. **PLAN** — Orchestrator reads `base/PROJECT.md` + `docs/REWORK-PLAN.md` +
    `GAME-PLAN.md`, selects the next unchecked work item.
 2. **BUILD** — Developer agent implements the work item, commits to a feature
-   branch. (Converter work is Python; Engine work is MoonScript — see
-   `base/RULES.md` language boundary rule.)
+   branch. (Witch is Python; Enchantment is C — see `base/RULES.md` language
+   boundary rule.)
 3. **VERIFY** — Tester and Security run in parallel after Developer commits.
 4. **EVALUATE** — Orchestrator collects metrics from all agents.
 5. **DECIDE** — KEEP or REVERT (see `orchestrator/loop-config.md` thresholds).
 6. **DOCUMENT** — Documentation agent updates changelog/docs (ONLY on KEEP).
 7. **LOG** — Append cycle results to `learning/METRICS-HISTORY.md` + `SKILLS-LOG.md`.
-8. **LOOP OR STOP / CUT OVER** — Check phase exit criteria. If Phase 2 completes,
+8. **LOOP OR STOP / CUT OVER** — Check phase exit criteria. If R4 completes,
    evaluate cutover per `orchestrator/CUTOVER.md`.
 
 ## How to Start a Session
@@ -149,6 +157,6 @@ current. Another runner can resume from this file and the current target in
 - When in doubt, the orchestrator decides
 - No agent may modify files in `/base` or `/stack` during a run
 - Read the `## Project Mode` marker at the top of `GAME-PLAN.md` before doing anything
-- Converter (Python) and Engine (MoonScript/Lua) are separate languages — never blur the boundary (`base/RULES.md`)
-- Engine agents edit `.moon` source only, never generated Lua (ADR-003)
+- Witch (Python) and Enchantment (C) are separate languages — never blur the boundary (`base/RULES.md`)
+- The old MoonScript engine and old parser/emitter are frozen: no fixes or features (D22)
 - All hardware budgets are tested against Old 3DS, not New 3DS (`base/RULES.md`)
