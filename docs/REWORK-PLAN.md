@@ -3,7 +3,7 @@
 > Status: v2.1, 2026-11-13. Replaces v1 of this document (same file). v1
 > assumed a LÖVE Potion runtime; the engine is now native C, so every feature
 > has been re-planned around what the hardware can actually do. v2.1 adds
-> D18–D22. "The engine" (Enchantment) and "the converter" (Witch) are used
+> D18–D23. "The engine" (Enchantment) and "the converter" (Witch) are used
 > throughout.
 
 ## 0. Decision log
@@ -34,6 +34,7 @@ Settled:
 | D20 | **Vertical slice first:** Jisei goes through every layer onto hardware before the corpus is broadened. Corpus coverage is a running metric, not a phase gate | §15 |
 | D21 | **Hardware truth early:** a spike (phase H) right after R0 measures MicroPython and memory on Old 3DS against go/no-go numbers, with a named fallback | §15 |
 | D22 | **The old pipeline is frozen:** no fixes or features for the MoonScript engine or the old parser/emitter. It stays in the repo, unchanged, until R9 removes it | §15 |
+| D23 | **Old 3DS is the only test hardware.** Every phase exit is measured on it. New-3DS-only paths (MVD video, high-speed mode, extra cores, the larger memory mode) are built behind runtime detection with the Old 3DS path as fallback, checked in Azahar's New 3DS mode where it emulates them, and listed as unverified on hardware until a New 3DS is available | §3, §15 |
 
 Open: nothing. The H and R3 re-reviews (D1) may reopen decisions with
 measured data.
@@ -797,7 +798,7 @@ The old pipeline is frozen (D22).
     C reader with desktop gcc and devkitARM. The fixtures are in
     `tests/witch/test_verify.py`.
 - **H — Hardware spike (D21).**
-  - On Old 3DS and New 3DS: MicroPython with a stub `renpy` shim, running
+  - On Old 3DS (D23): MicroPython with a stub `renpy` shim, running
     Mice Tea's post-init Python; its heap high-water mark; SD read
     throughput; the memory modes a CIA can request with HOME Menu and sleep
     still working.
@@ -828,9 +829,8 @@ The old pipeline is frozen (D22).
     cursor following Ren'Py's focus order. That's enough for Jisei's main
     menu and investigation scenes; the full SL2 runtime and the touch
     mirror come in R5.
-  - The remaining hardware measurements: decode benchmarks
-    (MPEG-2/Theora/MVD), the texture-format quality bar, and wide mode and
-    stereo on O3DS/N3DS/2DS.
+  - The remaining hardware measurements on Old 3DS: decode benchmarks
+    (MPEG-2/Theora), the texture-format quality bar, wide mode and stereo.
   - Exit: Jisei plays start to finish on Old 3DS hardware from a native
     bundle, the desktop runner autoplays it without errors, and saves
     survive reconversion.
@@ -852,7 +852,9 @@ The old pipeline is frozen (D22).
   - Tiered video pipeline; DSP-ADPCM/Vorbis defaults from R3 data; lip-sync
     envelopes.
   - Exit: Scarlet Hollow's cinematics, menu video and effect loops play with
-    zero dropped frames on Old 3DS and New 3DS.
+    zero dropped frames on Old 3DS hardware. The New 3DS MVD path is
+    verified as far as an emulator allows and marked unverified on hardware
+    (D23).
 - **R7 — Puppets.**
   - Puppet displayable, surrogate fitting with measured error, Live2D open
     formats, Ren'Py Live2D semantics; E-mote research spike.

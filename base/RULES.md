@@ -42,8 +42,10 @@ queue and its decision log overrides older decisions where they differ.
    targets cover most 2D effects (`docs/REWORK-PLAN.md` §7.3). An effect is only
    flagged in the Problem Report after the routes there have been ruled out.
 7. **Azahar Old 3DS profile is the default test target** for every iteration,
-   after the desktop runner. New 3DS and real hardware validation happen at
-   phase boundaries, and in phase H.
+   after the desktop runner. Real hardware validation happens at phase
+   boundaries and in phase H, on an Old 3DS: it's the only test hardware
+   (REWORK-PLAN D23), so New-3DS-only paths are reported as unverified on
+   hardware.
 
 ## Problem Report integrity rules
 
