@@ -12,7 +12,7 @@ Settled:
 
 | # | Decision | Where |
 |---|---|---|
-| D1 | Rework approved, with plan re-reviews after R1 (harvester across the corpus) and R3 (hardware measurements) | §15 |
+| D1 | Rework approved, with plan re-reviews after H (hardware spike) and R3 (Jisei on hardware) | §15 |
 | D2 | Original VNDS scripts are not read by the engine; VNDS becomes a converter source | ADR-004 |
 | D3 | **Native C engine** (citro3d/ctrulib/ndsp) with a desktop backend for testing. LÖVE Potion and MoonScript are dropped | ADR-005 (to write), §3 |
 | D4 | All of a game's languages go into one bundle, switchable in settings | §6.10 |
@@ -31,8 +31,11 @@ Settled:
 | D17 | Rebrand: project **VN3DS-CHARM**, converter **Witch**, engine **Enchantment**, bundle files **`.charm`** | ADR-006, §16 |
 | D18 | **Init runs at convert time.** Witch runs a game's init on MicroPython's desktop build and ships the resulting store as a snapshot; the 3DS only runs what can't be snapshotted | §6.1 |
 | D19 | **One store serializer** for the init snapshot, saves and rollback. Rollback keeps whole-store snapshots that share unchanged objects, not change-tracked diffs | §6.1, §8.9 |
+| D20 | **Vertical slice first:** Jisei goes through every layer onto hardware before the corpus is broadened. Corpus coverage is a running metric, not a phase gate | §15 |
+| D21 | **Hardware truth early:** a spike (phase H) right after R0 measures MicroPython and memory on Old 3DS against go/no-go numbers, with a named fallback | §15 |
+| D22 | **The old pipeline is frozen:** no fixes or features for the MoonScript engine or the old parser/emitter. It stays in the repo, unchanged, until R9 removes it | §15 |
 
-Open: nothing. The R1 and R3 re-reviews (D1) may reopen decisions with
+Open: nothing. The H and R3 re-reviews (D1) may reopen decisions with
 measured data.
 
 ## 1. Goal and principles
@@ -97,7 +100,7 @@ menus. Hand-fixing a port is the exception for genuinely custom systems.
 | Hardware | Facts | How the engine uses it |
 |---|---|---|
 | CPU | O3DS: ARM11 MPCore 268 MHz, app core plus a time-limited share of the system core (`APT_SetAppCpuTimeLimit`). N3DS: 804 MHz, extra cores, 2 MB L2 | Main thread: VM, layout, animation. Worker threads: asset streaming, video decoding, audio decoding, texture decompression. On N3DS: high-speed mode plus a full extra core |
-| Memory (FCRAM) | App memory set in the CIA ExHeader. O3DS: 64 MB default, 72/80/96 MB modes (80/96 disable the browser and Miiverse while running). N3DS: 124 MB, or 178 MB (HOME Menu doesn't run) | Budgets in §11. A CIA requests the largest mode that keeps HOME Menu and sleep working, verified in R3 |
+| Memory (FCRAM) | App memory set in the CIA ExHeader. O3DS: 64 MB default, 72/80/96 MB modes (80/96 disable the browser and Miiverse while running). N3DS: 124 MB, or 178 MB (HOME Menu doesn't run) | Budgets in §11. A CIA requests the largest mode that keeps HOME Menu and sleep working, verified in phase H |
 | VRAM | 6 MB | Framebuffers, the hottest render targets |
 | GPU (PICA200) | Programmable vertex and geometry shaders. Fixed-function fragment stage with 6 texture-combiner (TEV) stages (incl. DOT3, MULTIPLY_ADD, INTERPOLATE), 3 texture units plus a procedural-texture unit, alpha test, 8-bit stencil, full blend equations and logic ops, render-to-texture | Everything in §7: compositing, transitions, color matrices, masks, puppets, 3D stage |
 | Texture formats | RGBA8, RGB8, RGBA5551, RGB565, RGBA4, LA8, HILO8, L8, A8, LA4, L4, A4, ETC1, ETC1A4; 1024×1024 max | Per-asset choice by measured quality (§11) |
@@ -695,7 +698,7 @@ covered by text or buttons.
   - No directory listing at runtime: the manifest is an index.
 - **Budgets (initial, refined in R3):**
 
-| Pool | O3DS (CIA, mode verified in R3) | N3DS (124 MB) |
+| Pool | O3DS (CIA, mode verified in phase H) | N3DS (124 MB) |
 |---|---|---|
 | Engine code + static data | ~4 MB | ~4 MB |
 | MicroPython heap | 4–12 MB per game | 8–24 MB |
@@ -763,42 +766,74 @@ The neutral model covers:
 
 ## 15. Phases
 
-Each phase ends with its exit criteria met on the validation targets (Jisei,
-Mice Tea, Life After Magic, Scarlet Hollow). The old pipeline keeps working
-until R6 reaches parity.
+Validation targets: Jisei (the first vertical slice), Mice Tea, Life After
+Magic, Scarlet Hollow. Each phase's exit names the targets it covers.
+
+Jisei goes through every layer onto hardware first (D20). The rest of the
+corpus is harvested and run on every change from R1 on, and its coverage
+(harvest success, Python conformance, verifier results) is logged in
+`learning/METRICS-HISTORY.md`. Those numbers show progress and set
+priorities; they don't hold a phase back until the phase that names them.
+
+The old pipeline is frozen (D22).
 
 - **R0 — Verification first.**
-  - Bundle verifier and schema; Problem Report v2; a desktop autoplay harness
-    for today's bundles.
-  - Exit: it reproduces the audit's crashes.
-- **R1 — Harvester.**
-  - Full harvest (§5) across all 15 Ren'Py games; the oracle frame-capture
-    helper.
-  - Exit: all 15 harvest cleanly, and node counts match Ren'Py's own.
+  - The bundle schema (ADR-007), one definition shared by Witch and
+    Enchantment, with the bundle verifier (§13.1) and Problem Report v2
+    (§13.2) built against it.
+  - Exit: a test fixture for each crash class the audit found (a jump to a
+    missing label, an opcode the engine doesn't know, two assets with the
+    same name) fails verification with the right Problem Report entry.
+- **H — Hardware spike (D21).**
+  - On Old 3DS and New 3DS: MicroPython with a stub `renpy` shim, running
+    Mice Tea's post-init Python; its heap high-water mark; SD read
+    throughput; the memory modes a CIA can request with HOME Menu and sleep
+    still working.
+  - Go/no-go on Old 3DS: one interaction's logic (a say with substitutions,
+    a menu with conditions, the jumps between them) under 50 ms, per-frame
+    Python callbacks (ATL `function`, `DynamicDisplayable`) under 2 ms, and
+    Mice Tea's heap within 12 MB.
+  - Fallback on a no-go: profile, and move the hot shim paths into C. If
+    that still misses, D9 is reopened with the measured numbers.
+  - Exit: the numbers are recorded here and the go/no-go decided.
   - *Plan re-review (D1).*
-- **R2 — Logic VM spike, then build.**
-  - MicroPython on hardware; py2→py3 normalization; the `renpy` shim; a
-    conformance suite from the corpus vs. CPython.
-  - Exit: ≥ 98% of reachable Python in the corpus runs unmodified, with the
-    rest listed by call site.
-- **R3 — Engine core + hardware truth.**
+- **R1 — Harvester.**
+  - Full harvest (§5) to the R0 schema, Jisei first, then the whole corpus
+    as a running metric; the oracle frame-capture helper.
+  - Exit: Jisei harvests cleanly and its node count matches Ren'Py's own.
+- **R2 — Logic.**
+  - MicroPython build; py2→py3 normalization; the `renpy` shim; the init
+    snapshot (§6.1) and the store serializer (D19); a conformance suite vs.
+    CPython, Jisei first.
+  - Exit: all of Jisei's reachable Python runs unmodified, and its snapshot
+    matches a full on-device init.
+- **R3 — Engine core: Jisei on hardware.**
   - Platform layers (3DS + desktop); VM; scene model; renderer with TEV
-    effects; render targets; transitions; ATL VM; text; audio; saves.
-  - Hardware measurements: SD throughput, memory modes, decode benchmarks
-    (MPEG-2/Theora/MVD), texture-format quality bar, wide mode and stereo on
-    O3DS/N3DS/2DS.
-  - Exit: Jisei plays start to finish on hardware from a native bundle, and
-    saves survive reconversion.
+    effects; render targets; transitions; ATL VM; text; audio; saves and
+    rollback.
+  - The headless desktop runner (§13.3).
+  - A minimal screen runtime: imagemaps, buttons and focus, with the d-pad
+    cursor following Ren'Py's focus order. That's enough for Jisei's main
+    menu and investigation scenes; the full SL2 runtime and the touch
+    mirror come in R5.
+  - The remaining hardware measurements: decode benchmarks
+    (MPEG-2/Theora/MVD), the texture-format quality bar, and wide mode and
+    stereo on O3DS/N3DS/2DS.
+  - Exit: Jisei plays start to finish on Old 3DS hardware from a native
+    bundle, the desktop runner autoplays it without errors, and saves
+    survive reconversion.
   - *Plan re-review (D1).*
 - **R4 — Displayables, assets, framing.**
   - Composite cache, LayeredImage, `im.*` at runtime, particles, 3D stage,
     quality-gated assets, pixel-art pipeline, framing with its content check
     and preview, wide mode.
   - Exit: Mice Tea and Life After Magic play end to end; content check clean;
-    budgets met on Old 3DS.
+    budgets met on Old 3DS; ≥ 98% of reachable Python in the corpus runs
+    unmodified, with the rest listed by call site.
 - **R5 — Screens and dual screen.**
-  - SL2 runtime, focus, dual-screen classification and layouts, split menus,
-    point-and-click mirror, system keyboard, translations.
+  - The full SL2 runtime (growing R3's minimal one), dual-screen
+    classification and layouts, split menus, point-and-click mirror, system
+    keyboard, translations.
   - Exit: every validation target's own menus work; Jisei's investigations
     work through the mirror; Scarlet Hollow's custom screens work.
 - **R6 — Video and audio polish.**
@@ -852,5 +887,5 @@ owner. Moving the local folder needs the project memory migrated.
 
 ## 17. Open decisions
 
-None. Everything is settled in §0. The R1 and R3 re-reviews (D1) may reopen
+None. Everything is settled in §0. The H and R3 re-reviews (D1) may reopen
 decisions with measured data.

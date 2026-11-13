@@ -11,9 +11,9 @@
 
 > **2026-11-13: rework approved.** `docs/REWORK-PLAN.md` (v2) replaces the
 > fix-by-fix approach with a rebuild of converter and engine as a native C
-> engine (phases R0–R9). Its phases are the active queue, ahead of the phases
-> below. Its decision log (§0) overrides the locked decisions here where they
-> differ.
+> engine (phases R0, H, R1–R9). Its phases are the active queue, ahead of
+> the phases below. Its decision log (§0) overrides the locked decisions here
+> where they differ. The old pipeline is frozen (D22).
 
 > This is the forward work queue and BUILD-mode canonical source of truth.
 > `PHASES.md` is the live checkbox tracker mirroring this file.
