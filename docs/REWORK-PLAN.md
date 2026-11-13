@@ -791,6 +791,11 @@ The old pipeline is frozen (D22).
   - Exit: a test fixture for each crash class the audit found (a jump to a
     missing label, an opcode the engine doesn't know, two assets with the
     same name) fails verification with the right Problem Report entry.
+  - **Done 2026-11-13.** `src/witch/bundle/` (schema, writer, reader, C
+    header generator), `src/witch/verify.py`, `src/witch/report.py`,
+    `python -m witch verify`. The generated header is checked by compiling a
+    C reader with desktop gcc and devkitARM. The fixtures are in
+    `tests/witch/test_verify.py`.
 - **H — Hardware spike (D21).**
   - On Old 3DS and New 3DS: MicroPython with a stub `renpy` shim, running
     Mice Tea's post-init Python; its heap high-water mark; SD read

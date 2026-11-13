@@ -81,3 +81,18 @@
   machine, while unrelated homebrew boots fine on the same builds — real
   hardware is the working validation path for now.
 - **Phase 0 exit criteria met. Phase 1 is unblocked.**
+
+## Rework R0 — Verification first (2026-11-13)
+
+- **Tests:** 27 new pytest tests (`tests/witch/`), all green; the frozen old
+  converter suite unchanged at 367 green.
+- **Build:** `charm_schema.h` compiles with `-Wall -Werror` under desktop gcc
+  and devkitARM (armv6k, hard float), with every struct size and offset
+  asserted. A C reader built against it reads a Python-written bundle
+  identically to Witch's reader.
+- **Exit:** each audit crash class fails verification: `missing-label`
+  (crash), `unsupported-statement` and `unknown-kind` (statements the engine
+  can't run), `duplicate-entry` (an asset path listed twice).
+- Found along the way: Git for Windows' `mingw64\bin` on PATH ahead of
+  MSYS2's makes cc1 load the wrong DLLs and exit `0xC0000139` with no
+  message. The C test puts the compiler's own directory first.
