@@ -29,6 +29,8 @@ Settled:
 | D15 | Puppet oracles (a game's own Live2D core / E-mote driver) are acceptable for personal use, never redistributed | §8.8 |
 | D16 | PC save import is a stretch goal for R8 | §8.9 |
 | D17 | Rebrand: project **VN3DS-CHARM**, converter **Witch**, engine **Enchantment**, bundle files **`.charm`** | ADR-006, §16 |
+| D18 | **Init runs at convert time.** Witch runs a game's init on MicroPython's desktop build and ships the resulting store as a snapshot; the 3DS only runs what can't be snapshotted | §6.1 |
+| D19 | **One store serializer** for the init snapshot, saves and rollback. Rollback keeps whole-store snapshots that share unchanged objects, not change-tracked diffs | §6.1, §8.9 |
 
 Open: nothing. The R1 and R3 re-reviews (D1) may reopen decisions with
 measured data.
@@ -162,9 +164,10 @@ It emits:
    game's own `renpy/python.py`. Python 2 games are normalized to Python 3 at
    the AST level using exactly those `__future__` flags (division,
    unicode_literals, print_function, …), so semantics stay identical (§6).
-3. **Initialized state.** Every `define` value and `default` initializer. All
-   `init python` code is shipped as code too, not only its results, because
-   the 3DS runs it (§6).
+3. **Initialized state.** Every `define` value and `default` initializer, as
+   Ren'Py computed them. These are the reference the init snapshot (§6.1) is
+   checked against; the snapshot itself comes from MicroPython, not CPython,
+   so it holds exactly what the 3DS would have built.
 4. **Images**: displayable trees (§7.2), attribute tables, LayeredImage
    definitions.
 5. **Transforms** (ATL trees), **Characters**, **resolved styles + `gui.*`**,
@@ -197,6 +200,7 @@ has been ported to the 3DS before, e.g. LiquidFenrir's `3dspython`).
   - Python 2 → 3 normalization with Ren'Py's own flags.
   - `mpy-cross` precompiles everything to MicroPython bytecode (`.mpy`), so
     nothing is parsed on the 3DS, and load is fast and small.
+  - The init phase runs on the PC and ships as a store snapshot (§6.1).
 - **The `renpy` API shim:**
   - A Python package (`renpy`, `store`, `persistent`, `config`, `gui`,
     `style`, `_window_*`, …) backed by C bindings into the engine.
@@ -219,8 +223,15 @@ has been ported to the 3DS before, e.g. LiquidFenrir's `3dspython`).
     count.
 - **Store, saves and rollback:**
   - Store variables live in MicroPython.
-  - Saves serialize the store with our own deterministic serializer.
-  - Rollback keeps per-checkpoint diffs in a bounded ring.
+  - One deterministic serializer writes the store for the init snapshot,
+    saves and rollback (D19). Functions and classes are written as references
+    to their module and qualified name, never as code.
+  - Rollback snapshots the whole store at each checkpoint, sharing every
+    object whose serialized form hasn't changed with the previous checkpoint,
+    in a bounded ring. Change tracking in the style of Ren'Py's revertable
+    types isn't reliable on MicroPython, because built-in functions bypass
+    methods overridden on `list`/`dict` subclasses. A visual novel's store is
+    a few KB, so snapshots stay cheap.
 - **Other engines use the same VM:**
   - KiriKiri's TJS2, TyranoScript's JS and RealLive/CatSystem2 script logic
     are translated into Python by their front ends.
@@ -229,6 +240,38 @@ has been ported to the 3DS before, e.g. LiquidFenrir's `3dspython`).
   ATL, text, audio, video) is all C. MicroPython's heap is a fixed region
   (sized per game from the corpus scan, typically 4–12 MB). Garbage
   collection runs between interactions, never mid-animation.
+
+### 6.1 Init at convert time
+
+A Ren'Py game's init phase builds hundreds to thousands of images,
+transforms, Characters and data tables. The harvester took 4.6 s for Mice Tea
+on a desktop PC; on a 268 MHz Old 3DS running MicroPython that would be
+minutes at every launch. So init runs once, on the PC (D18):
+
+- Witch runs the game's init (`init python`, `define`, `default`, `image`,
+  `transform`, in Ren'Py's init-priority order) on **MicroPython's desktop
+  build with the same `renpy` shim** the 3DS uses, so the result is what the
+  3DS would have computed.
+- The resulting store is written into the bundle with the D19 serializer.
+  The 3DS loads it instead of running init.
+- Init blocks are split at convert time: top-level `def`, `class` and
+  `import` statements still run on the 3DS (cheap, and they recreate the
+  functions and classes the snapshot refers to). Everything else comes from
+  the snapshot.
+- Some init code must run on the device and is kept whole:
+  - blocks that read `persistent`, preferences, `renpy.variant` or the
+    selected language
+  - blocks whose definitions and data can't be separated cleanly, such as
+    decorators or class bodies that compute from data
+  - blocks that leave values the serializer can't write, such as lambdas or
+    closures stored in data
+
+  The Problem Report lists each such block with its measured on-device cost.
+- The R2 conformance suite runs a full init on the device for the
+  validation targets and checks that its serialized store matches the
+  snapshot.
+
+### 6.2 Alternatives
 
 Alternatives considered and rejected:
 - **Lua 5.4 plus a Python→Lua compiler:** the v1 approach, with much more
@@ -514,7 +557,8 @@ extractors:
 As v1 §6.9:
 - Saves hold node id, call stack, store, scene lists with transform state,
   audio, window and screens.
-- Rollback is a bounded diff ring.
+- Rollback is a bounded ring of store snapshots that share unchanged objects
+  (§6, D19).
 - Seen-node tracking drives skip.
 - Auto mode uses Ren'Py's formula.
 - Saves get a 400×240 top-screen thumbnail through GX capture.
