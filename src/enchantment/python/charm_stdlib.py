@@ -2,7 +2,8 @@
 CPython's in ways Ren'Py's code depends on. Each is a proxy in sys.modules
 that adds the missing pieces and passes everything else through.
 
-- os: environ. A game on the 3DS has no environment variables, so it's empty.
+- os: environ (a game on the 3DS has no environment variables, so it's
+  empty) and path (stdlib/ospath.py).
 - collections: defaultdict, which MicroPython only has in micropython-lib.
 """
 import collections as _collections
@@ -60,5 +61,7 @@ class _Proxy:
 
 
 def install():
-    sys.modules["os"] = _Proxy(_os, environ={})
+    import ospath
+    sys.modules["os"] = _Proxy(_os, environ={}, path=ospath)
+    sys.modules["os.path"] = ospath
     sys.modules["collections"] = _Proxy(_collections, defaultdict=defaultdict)
