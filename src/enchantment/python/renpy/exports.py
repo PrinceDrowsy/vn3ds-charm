@@ -107,4 +107,8 @@ def __getattr__(name):
         __import__(module)
         module = sys.modules[module]
         return module if attr is None else getattr(module, attr)
+    # Ren'Py copies its package's globals (platform flags, submodules) into
+    # exports, under exports' own names.
+    if name in renpy.__dict__:
+        return renpy.__dict__[name]
     return submodule_or_missing("renpy", name)

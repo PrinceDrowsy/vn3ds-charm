@@ -5,6 +5,9 @@ that adds the missing pieces and passes everything else through.
 - os: environ (a game on the 3DS has no environment variables, so it's
   empty) and path (stdlib/ospath.py).
 - collections: defaultdict, which MicroPython only has in micropython-lib.
+
+Modules with no place on the device (the updater's tarfile, the PC
+engine's pygame_sdl2) are placeholders that report each use.
 """
 import collections as _collections
 import os as _os
@@ -60,7 +63,13 @@ class _Proxy:
             return getattr(self._module, name)
 
 
+_ABSENT_MODULES = ("tarfile", "pygame_sdl2")
+
+
 def install():
+    from renpy.missing import MissingModule
+    for name in _ABSENT_MODULES:
+        sys.modules[name] = MissingModule(name)
     import ospath
     sys.modules["os"] = _Proxy(_os, environ={}, path=ospath)
     sys.modules["os.path"] = ospath
