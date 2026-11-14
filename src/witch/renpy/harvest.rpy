@@ -342,6 +342,9 @@ init 999999 python:
                 out["dict"] = sorted(pairs, key=lambda p: sort_key(p[0]))
             elif isinstance(v, (builtins.set, builtins.frozenset)):
                 out["set"] = sorted((val(x, depth + 1) for x in v), key=sort_key)
+            elif kind_of(type(v))[0] is not None or isinstance(v, style_types):
+                # A description (REWORK-PLAN §6.3): compared by its record.
+                out["lowered"] = lower(v)
             else:
                 out["object"] = qualified(type(v))
                 attrs = {}
@@ -352,6 +355,76 @@ init 999999 python:
                         pass  # an empty slot
                 out["attrs"] = attrs
             return out
+
+        # Lowering (REWORK-PLAN §6.3): Ren'Py's own display objects as
+        # records in Witch's description vocabulary (bundle/descriptions.py),
+        # which the shim's records are checked against. The same rules as
+        # the shim's charm_lower.py.
+        with open(os.environ["WITCH_DESCRIPTIONS"]) as descriptions_file:
+            descriptions = json.load(descriptions_file)
+        atl_nodes = builtins.dict((id(n.atl), i) for i, n in enumerate(nodes) if getattr(n, "atl", None) is not None)
+        absolute = getattr(renpy.display.core, "absolute", ())
+        style_types = getattr(renpy.style, "StyleCore", ())
+        absent = builtins.object()
+
+        def kind_of(cls):
+            """The kind a class lowers to, and whether the class itself is
+            listed (a subclass lowers as its nearest listed base)."""
+            for klass in getattr(cls, "__mro__", ()):
+                kind = descriptions["classes"].get(qualified(klass))
+                if kind is not None:
+                    return kind, klass is cls
+            return None, False
+
+        def lower(v, depth=0):
+            if v is None or isinstance(v, builtins.bool):
+                return v
+            if isinstance(v, absolute):
+                return {"absolute": builtins.float(v)}
+            if isinstance(v, int_types + (builtins.float,) + text_types):
+                return val(v)
+            if depth > 30:
+                return {"too_deep": type(v).__name__}
+            if isinstance(v, sequence_types):
+                return [lower(x, depth + 1) for x in v]
+            if isinstance(v, builtins.dict):
+                return {"dict": [[lower(k, depth + 1), lower(x, depth + 1)] for k, x in v.items()]}
+            if isinstance(v, (builtins.set, builtins.frozenset)):
+                return {"set": [lower(x, depth + 1) for x in v]}
+            if isinstance(v, module_type):
+                return {"module": v.__name__}
+            if isinstance(v, function_types):
+                return {"function": qualified(getattr(v, "__func__", v))}
+            if isinstance(v, type):
+                return {"class": qualified(v)}
+            if isinstance(v, style_types):
+                state = v.__getstate__()
+                return {"style": state["parent"] and builtins.list(state["parent"]),
+                        "name": state["name"] and builtins.list(state["name"]),
+                        "properties": [[[k, lower(x, depth + 1)] for k, x in d.items()] for d in state["properties"]]}
+            if qualified(type(v)) == "renpy.curry.Curry":
+                # By name: Ren'Py can hold instances of a Curry class from
+                # before it reloaded its modules.
+                return {"curry": lower(v.callable, depth + 1), "args": lower(v.args, depth + 1),
+                        "kwargs": lower(v.kwargs, depth + 1)}
+            kind, exact = kind_of(type(v))
+            if kind is None:
+                return {"object": qualified(type(v))}
+            record = {"kind": kind}
+            if not exact:
+                record["class"] = qualified(type(v))
+            for attr in descriptions["attrs"][kind]:
+                name, tag = (attr, None) if isinstance(attr, text_types) else attr
+                value = getattr(v, name, absent)
+                if value is absent:
+                    continue
+                if tag == "atl":
+                    record[name] = atl_nodes.get(id(value))
+                elif tag == "parameters":
+                    record[name] = [] if value is None else signature(value)["signature"]
+                else:
+                    record[name] = lower(value, depth + 1)
+            return record
 
         def attribute_names(v):
             """An object's own state: its slots and instance dict, not class
@@ -489,6 +562,12 @@ init 999999 python:
                 # ATL's transform properties and the type of each, by name.
                 "atl_properties": dict((k, atl_type(v)) for k, v in renpy.atl.PROPERTIES.items()),
             }
+            # What init registered rather than stored, as records.
+            records = {
+                "images": [[builtins.list(name), lower(d)] for name, d in sorted(renpy.display.image.images.items())],
+                "channels": [[name, lower(c)] for name, c in sorted(renpy.audio.audio.channels.items())],
+            }
+            f.write('"records": %s,\n' % json.dumps(records))
             f.write('"python": %s,\n"initcode": %s,\n"modules": %s,\n"renpy_modules": %s,\n"style_tables": %s,\n'
                     '"early": %s,\n"config": ' % (json.dumps(python), json.dumps(initcode), json.dumps(modules),
                                                   json.dumps(renpy_modules), json.dumps(style_tables),
