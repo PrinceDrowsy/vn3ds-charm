@@ -1,0 +1,77 @@
+diff --git a/py/objdict.c b/py/objdict.c
+index 58f654d..3df3829 100644
+--- a/py/objdict.c
++++ b/py/objdict.c
+@@ -170,8 +170,10 @@ static mp_obj_t dict_binary_op(mp_binary_op_t op, mp_obj_t lhs_in, mp_obj_t rhs_
+             }
+             #endif
+ 
+-            if (mp_obj_is_type(rhs_in, &mp_type_dict)) {
+-                mp_obj_dict_t *rhs = MP_OBJ_TO_PTR(rhs_in);
++            // an instance of a dict subclass compares as the dict it holds
++            mp_obj_t rhs_dict = mp_obj_cast_to_native_base(rhs_in, MP_OBJ_FROM_PTR(&mp_type_dict));
++            if (rhs_dict != MP_OBJ_NULL) {
++                mp_obj_dict_t *rhs = MP_OBJ_TO_PTR(rhs_dict);
+                 if (o->map.used != rhs->map.used) {
+                     return mp_const_false;
+                 }
+diff --git a/py/objlist.c b/py/objlist.c
+index 41c9205..9c956bb 100644
+--- a/py/objlist.c
++++ b/py/objlist.c
+@@ -110,11 +110,14 @@ static mp_obj_t list_unary_op(mp_unary_op_t op, mp_obj_t self_in) {
+ 
+ static mp_obj_t list_binary_op(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
+     mp_obj_list_t *o = MP_OBJ_TO_PTR(lhs);
++    // an instance of a list subclass takes part as the list it holds
++    mp_obj_t rhs_list = mp_obj_cast_to_native_base(rhs, MP_OBJ_FROM_PTR(&mp_type_list));
+     switch (op) {
+         case MP_BINARY_OP_ADD: {
+-            if (!mp_obj_is_type(rhs, &mp_type_list)) {
++            if (rhs_list == MP_OBJ_NULL) {
+                 return MP_OBJ_NULL; // op not supported
+             }
++            rhs = rhs_list;
+             mp_obj_list_t *p = MP_OBJ_TO_PTR(rhs);
+             mp_obj_list_t *s = list_new(o->len + p->len);
+             mp_seq_cat(s->items, o->items, o->len, p->items, p->len, mp_obj_t);
+@@ -141,14 +144,14 @@ static mp_obj_t list_binary_op(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
+         case MP_BINARY_OP_LESS_EQUAL:
+         case MP_BINARY_OP_MORE:
+         case MP_BINARY_OP_MORE_EQUAL: {
+-            if (!mp_obj_is_type(rhs, &mp_type_list)) {
++            if (rhs_list == MP_OBJ_NULL) {
+                 if (op == MP_BINARY_OP_EQUAL) {
+                     return mp_const_false;
+                 }
+                 return MP_OBJ_NULL; // op not supported
+             }
+ 
+-            mp_obj_list_t *another = MP_OBJ_TO_PTR(rhs);
++            mp_obj_list_t *another = MP_OBJ_TO_PTR(rhs_list);
+             bool res = mp_seq_cmp_objs(op, o->items, o->len, another->items, another->len);
+             return mp_obj_new_bool(res);
+         }
+diff --git a/py/objset.c b/py/objset.c
+index c8fa12a..77f868e 100644
+--- a/py/objset.c
++++ b/py/objset.c
+@@ -452,6 +452,18 @@ static mp_obj_t set_unary_op(mp_unary_op_t op, mp_obj_t self_in) {
+ }
+ 
+ static mp_obj_t set_binary_op(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
++    if (op != MP_BINARY_OP_CONTAINS && !is_set_or_frozenset(rhs)) {
++        // an instance of a set subclass takes part as the set it holds
++        mp_obj_t native = mp_obj_cast_to_native_base(rhs, MP_OBJ_FROM_PTR(&mp_type_set));
++        #if MICROPY_PY_BUILTINS_FROZENSET
++        if (native == MP_OBJ_NULL) {
++            native = mp_obj_cast_to_native_base(rhs, MP_OBJ_FROM_PTR(&mp_type_frozenset));
++        }
++        #endif
++        if (native != MP_OBJ_NULL) {
++            rhs = native;
++        }
++    }
+     mp_obj_t args[] = {lhs, rhs};
+     #if MICROPY_PY_BUILTINS_FROZENSET
+     bool update = mp_obj_is_type(lhs, &mp_type_set);
