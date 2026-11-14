@@ -143,6 +143,15 @@ The first phases of `docs/REWORK-PLAN.md`: the bundle format and verifier
   rewrite against the original, pick inputs that drive every branch, and
   count how many cases each branch saw.
 
+- **Init treated as a list when it's a program.** (R2.4) The runner
+  followed each init block's `next` chain, which skipped `call` (so
+  `gui._scale` never existed), ran `.rpym` modules in the wrong phase and
+  never created stores before init. Each looked like a missing shim
+  feature until the trace showed control flow and phases. *Prevention:*
+  before emulating a stage of the original, read the code that drives it
+  (Ren'Py's `main.py`, `script.finish_load`, `exports.load_module`) end to
+  end, not just the statements it runs.
+
 ### What to do differently
 
 - Run the widest corpus as early as possible: the version differences

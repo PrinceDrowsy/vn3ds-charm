@@ -1137,10 +1137,27 @@ The old pipeline is frozen (D22).
         23 remaining errors, three are imports still to stand in
         (`pygame_sdl2`, `tarfile`, `pyobjus`); most of the rest need the
         description zone.
-      - **R2.4b The backend port.** `_charm` as a recording backend; the
-        init result carries its registries; the `image`, `transform`,
-        `style`, `screen`, `default` and `translate strings` statements
-        run instead of being listed.
+      - **R2.4b The backend port. Done 2026-11-14.** `_charm` as a
+        recording backend; the init result carries its registries; the
+        `image`, `transform`, `style`, `screen`, `default` and
+        `translate strings` statements run instead of being listed.
+        Running them showed that init is more than a list of blocks, so
+        the runner now also follows Ren'Py's own phases: startup
+        (`_errorhandling.rpym`, system styles), the script-load phase
+        (stores, `python early`, early config, with the statement classes
+        harvested from the game's Ren'Py), init code as a graph (labels,
+        calls, ifs, loops), and `.rpym` modules at their
+        `renpy.load_module` call.
+      - **R2.4c progress, 2026-11-14:** styles (a port of `style.pyx`'s
+        data side), `im.*` and `im.matrix`, `ImageReference`, `Solid`,
+        `Frame`, the box layouts, `ConditionSwitch`/`DynamicDisplayable`,
+        `ParameterizedText`, `renpy.Displayable`. Jisei: 3,803 steps run,
+        16 errors, 617 of 635 store names. Two more MicroPython patches
+        (stepped slices on tuples and strings; `__new__` on built-in
+        types). Next: `Character`, `Text`, transitions, `Transform`,
+        audio channels, the `renpy.ui` widgets, then the standard
+        modules still missing (`tarfile`, `pygame_sdl2`, `pyobjus`). Style property *reads* are reported and give
+        None until resolution lands with R2.4d.
       - **R2.4c Description classes** for what Jisei's init builds:
         images and `im.*`, `Frame`, `Solid`, `Null`, the box layouts
         `renpy.ui` uses, `Transform` and ATL transforms, the transition
