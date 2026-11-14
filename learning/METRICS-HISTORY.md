@@ -118,3 +118,19 @@ synthetic Mice Tea-sized workload (`spikes/hardware/`). Five hardware runs.
 - Spike bugs found on the way: a malloc probe that "succeeded" at 512 MB
   (replaced with mallinfo), a 600-frame GC-disabled loop that inflated H.1's
   frame worst case, and MicroPython's privileged CP15 cache flush on ARM.
+
+## Rework R1 — Harvester (2026-11-13/14)
+
+- **Corpus:** all 17 Ren'Py games in the library convert, 3,665,525 nodes,
+  Ren'Py 6.15.7 to 8.5.0; every node count matches Ren'Py's own, none
+  outside the graph. Slowest: Katawa Shoujo, 1.41 million nodes in 100 s.
+- **Problems:** no conversion-introduced crash, stuck or unsupported
+  statement in any game. Gating items are displayables only (R4). 81
+  inherited problems across 9 games (DLC labels, dead code, debug menus,
+  undefined images in an easter egg).
+- **Tests:** 57 pytest in `tests/witch/`, all green.
+- Lessons: a harvester that runs inside the game's own engine needs to be
+  version-neutral in how it starts (env var at init, not CLI), how it reads
+  objects (slots, annotations, attributes) and how much it holds in memory;
+  and a game may contact Steam on its own, so harvesting must be isolated
+  from the installed copy and from the Steam client.

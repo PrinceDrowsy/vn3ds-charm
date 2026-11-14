@@ -884,22 +884,33 @@ The old pipeline is frozen (D22).
   - **Jisei exit met 2026-11-13:** `python -m witch convert`; all 31281 of
     Ren'Py's nodes, none outside the graph; no crash, stuck or unsupported
     statement problems. What remains is R4's: 206 images, 82 ATL blocks.
-  - **First corpus run (`tools/witch/corpus.py`):** 10 of 15 games convert,
-    each matching Ren'Py's node count exactly (1.8 million nodes, Ren'Py
-    6.99–8.3). Open items, in order:
-    - `TranslateSay` (Ren'Py 8.2+, A Date with Death and Mice Tea) isn't
-      mapped yet.
-    - `call hide_windows` in `renpy/common/00keymap.rpy` (most games):
-      Ren'Py's own label, probably defined in a file the harvest misses.
-    - Real missing labels in game scripts: I Just Want to be Single!! (12),
-      Our Life (about 50), one or two elsewhere; check against Ren'Py
-      whether they're truly unreachable.
-    - Gender Bender DNA Twister Extreme: a Define/Default without `store`
-      (older Ren'Py).
-    - Katawa Shoujo: Ren'Py traceback during the harvest.
-    - DateWarp, Long Live the Queen, Magical Diary: no harvest in 600 s. Long
-      Live the Queen stopped on its own Steam Cloud error screen; the
-      harvester now sets `RENPY_NO_STEAM` and closes a stuck game.
+  - **Done 2026-11-14. Corpus: all 17 Ren'Py games in the library convert**
+    (`tools/witch/corpus.py`), 3,665,525 nodes, Ren'Py 6.15 to 8.5, each
+    matching Ren'Py's own node count with none outside the graph. No
+    conversion-introduced crash, stuck or unsupported-statement problem in
+    any game; the only gating items are displayables (R4). Inherited
+    problems, which the original game has too (DLC branches, debug menus,
+    dead code, an easter egg showing undefined images), are reported apart
+    and don't gate.
+  - What the corpus taught the harvester:
+    - It runs as init code (`init 999999`, started by an environment
+      variable) rather than a command, because launchers pass arguments
+      differently across versions, and exits before the game starts.
+    - It reads node fields from `__slots__`, class annotations (8.5) and
+      instance attributes, and labels from the nodes themselves (8.5 keys
+      the name map by node).
+    - It streams to disk: Katawa Shoujo's 1.4 million nodes ran a 32-bit
+      Ren'Py 6.16 out of memory when held whole.
+    - It never starts the installed game. `RENPY_NO_STEAM` keeps Ren'Py
+      off Steam. Games that call `SteamAPI_RestartAppIfNecessary` (Long
+      Live the Queen, Magical Diary) get a stand-in steam_api DLL in the
+      scratch copy. A watch on the installed folder closes anything a
+      harvest makes Steam launch.
+  - Moved to the phases that consume them, so nothing is harvested that no
+    code reads yet: Python compile flags and initialized state (R2), the
+    oracle frame-capture helper (R3, with the desktop runner it's compared
+    against), displayable trees and ATL (R4), screens, styles, audio
+    channels and fonts (R5/R6).
 - **R2 — Logic.**
   - MicroPython build; py2→py3 normalization; the `renpy` shim; the init
     snapshot (§6.1) and the store serializer (D19); a conformance suite vs.
