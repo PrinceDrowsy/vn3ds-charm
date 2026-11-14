@@ -40,7 +40,7 @@ def run(game: Path, scratch: Path) -> dict:
         traceback.print_exc()
         return {"game": game.name, "error": f"build: {type(e).__name__}: {e}"}
     (scratch / f"{game.name}.charm").write_bytes(data)
-    report = verify(data, game.name)
+    report = verify(data, game.name, set(h["labels"]))
     bundle = Bundle(data)
     unknown = Counter(n.fields["classname"] for n in map(bundle.node, range(bundle.count("NODE")))
                       if n.kind.name == "unknown")

@@ -14,7 +14,9 @@ ENTRY_LABELS = ("splashscreen", "before_main_menu", "main_menu", "start", "after
 _HAS_LABEL = re.compile(r"""\s*renpy\.has_label\(\s*(['"])([^'"]+)\1\s*\)\s*""")
 
 
-def verify(data: bytes, name: str = "") -> Report:
+def verify(data: bytes, name: str = "", source_labels: set[str] | None = None) -> Report:
+    """`source_labels`, when the caller knows them, are the labels the
+    original game defines; a jump to a label it lacks too is inherited."""
     report = Report(name, [])
     try:
         bundle = Bundle(data)
@@ -24,7 +26,7 @@ def verify(data: bytes, name: str = "") -> Report:
         report.problems.append(Problem(e.code, "crash", "static", str(e),
                                        "The bundle is damaged or from another Witch version; reconvert it."))
         return report
-    _Checker(bundle, nodes, report.problems).run()
+    _Checker(bundle, nodes, report.problems, source_labels).run()
     return report
 
 
@@ -61,10 +63,11 @@ def _check_tables(bundle: Bundle, nodes: list[Node]) -> None:
 
 
 class _Checker:
-    def __init__(self, bundle: Bundle, nodes: list[Node], problems: list[Problem]):
+    def __init__(self, bundle: Bundle, nodes: list[Node], problems: list[Problem], source_labels: set[str] | None):
         self.bundle = bundle
         self.nodes = nodes
         self.problems = problems
+        self.source_labels = source_labels
         self.labels = dict(bundle.labels())
         # Ren'Py resolves `show tag attrs` by attribute matching, which arrives
         # with R4; until then a show only needs some image with its tag.
@@ -79,10 +82,11 @@ class _Checker:
             self._check_node(node)
         self._check_images()
 
-    def _add(self, code: str, severity, reach: Reach, node: Node | None, message: str, suggestion: str = "") -> None:
+    def _add(self, code: str, severity, reach: Reach, node: Node | None, message: str, suggestion: str = "",
+             inherited: bool = False) -> None:
         file, line = self.bundle.node_loc(node.index) if node else ("", 0)
         node_name = self.bundle.node_name(node.index) if node else ""
-        self.problems.append(Problem(code, severity, reach, message, suggestion, file, line, node_name))
+        self.problems.append(Problem(code, severity, reach, message, suggestion, file, line, node_name, inherited))
 
     def _successors(self, node: Node) -> list[int]:
         f = node.fields
@@ -142,7 +146,10 @@ class _Checker:
         elif kind in ("jump", "call"):
             target = f["target"] if kind == "jump" else f["label"]
             if target not in self.labels:
-                self._add("missing-label", "crash", reach, node, f"`{kind} {target}` targets a label that doesn't exist.")
+                inherited = self.source_labels is not None and target not in self.source_labels
+                self._add("missing-label", "crash", reach, node, f"`{kind} {target}` targets a label that doesn't exist.",
+                          "The original game lacks it too; often DLC that isn't installed." if inherited else "",
+                          inherited)
         elif kind == "menu":
             if f["items"] and all(item["block"] == NONE for item in f["items"]):
                 self._add("menu-without-choices", "stuck", reach, node,

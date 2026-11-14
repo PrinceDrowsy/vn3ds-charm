@@ -179,3 +179,22 @@ def test_a_call_guarded_by_has_label_of_a_missing_label_is_dead():
     report = verify(w.write())
     reaches = {p.message.split("`")[1]: p.reach for p in report.problems}
     assert reaches == {"call hide_windows": "none", "call nowhere": "dynamic"}
+
+
+def test_a_label_the_original_lacks_too_is_inherited():
+    w = _game()
+    x = w.node("label", {"name": "x"})
+    w.link(x, w.node("jump", {"target": "dlc_only"}))
+    w.label("x", x)
+    y = w.node("label", {"name": "y"})
+    w.link(y, w.node("jump", {"target": "dropped"}))
+    w.label("y", y)
+    data = w.write()
+    # Witch dropped `dropped`; the original never had `dlc_only`.
+    report = verify(data, source_labels={"start", "ending", "x", "y", "dropped"})
+    by_target = {p.message.split("`")[1]: p for p in report.problems}
+    assert by_target["jump dlc_only"].inherited and not by_target["jump dlc_only"].gates
+    assert not by_target["jump dropped"].inherited and by_target["jump dropped"].gates
+    assert report.failed
+    assert "in the original too" in report.to_markdown()
+    assert not any(p.inherited for p in verify(data).problems)

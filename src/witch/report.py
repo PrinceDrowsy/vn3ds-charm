@@ -30,10 +30,14 @@ class Problem:
     file: str = ""
     line: int = 0
     node: str = ""  # Ren'Py's node name, when the problem belongs to a node
+    # The original game has the same fault (e.g. a jump to a label only DLC
+    # supplies). Still reported, since a player could hit it on PC too, but it
+    # doesn't fail the build: the gate is for faults conversion introduced.
+    inherited: bool = False
 
     @property
     def gates(self) -> bool:
-        return self.severity in GATING and self.reach != "none"
+        return self.severity in GATING and self.reach != "none" and not self.inherited
 
 
 @dataclass
@@ -61,6 +65,7 @@ class Report:
             "bundle": self.bundle,
             "failed": self.failed,
             "summary": self.summary(),
+            "inherited": sum(p.inherited for p in self.problems),
             "problems": [asdict(p) for p in self.ordered()],
         }, ensure_ascii=False, indent=1)
 
@@ -77,5 +82,6 @@ class Report:
                 current = p.severity
                 out += ["", f"## {current}", ""]
             where = f"{p.file}:{p.line}" if p.file else "bundle"
-            out.append(f"- `{p.code}` ({p.reach}) {where}: {p.message}" + (f" {p.suggestion}" if p.suggestion else ""))
+            tags = p.reach + (", in the original too" if p.inherited else "")
+            out.append(f"- `{p.code}` ({tags}) {where}: {p.message}" + (f" {p.suggestion}" if p.suggestion else ""))
         return "\n".join(out) + "\n"
