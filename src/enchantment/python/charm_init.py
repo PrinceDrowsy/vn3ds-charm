@@ -22,6 +22,9 @@ from renpy.python import StoreModule, create_store, store_dicts  # noqa: E402
 from renpy.styledata import stylesets  # noqa: E402
 
 
+_ABSENT = object()
+
+
 def run(step):
     """One init statement, as Ren'Py 7.0's ast.py executes it. Expressions
     evaluate in the main store whatever store the statement names."""
@@ -76,7 +79,7 @@ def run(step):
             renpy.translation.deferred_styles.append(step["node"])
         else:
             apply_style(step)
-    elif kind == "Pass":
+    elif kind in ("Pass", "Init"):
         pass
     else:
         missing.record("statement " + kind)
@@ -231,15 +234,27 @@ def post_import():
     store["eval"] = defaultstore["eval"]
 
 
-def startup():
-    """What Ren'Py's main does between loading the script and running init:
-    the screen variants (a PC's, since the port reproduces the PC game), the
-    store's self-reference and style manager, then persistent data (fresh on
-    a first run) and the preferences it carries."""
+def startup(load_rpym, rpym):
+    """What Ren'Py's main does before loading the script: the screen
+    variants (a PC's, since the port reproduces the PC game), the store's
+    self-reference and style manager, then the error-handling module and
+    the system styles it sets up."""
     renpy.config.variants = ["large", "pc", None]
     store = store_dicts["store"]
     store["store"] = sys.modules["store"]
     store["style"] = renpy.style.StyleManager()
+    load_rpym("_errorhandling")
+    if "tl/None/common" in rpym:
+        load_rpym("tl/None/common")
+    if renpy.config.init_system_styles is not None:
+        renpy.config.init_system_styles()
+    renpy.style.build_styles()
+
+
+def load_persistent():
+    """What Ren'Py's main does between loading the script and running init:
+    persistent data (fresh on a first run) and the preferences it carries."""
+    store = store_dicts["store"]
     persistent = sys.modules["renpy.persistent"]._dict["Persistent"]()
     renpy.game.persistent = persistent
     renpy.game.preferences = persistent._preferences
@@ -275,22 +290,98 @@ def main(program_path, result_path):
     for name, entry in program["modules"]:  # in the harvest's load order
         attempt((name, 0), load_module, name, entry, attempt)
     attempt(("post_import", 0), post_import)
-    attempt(("startup", 0), startup)
 
-    ran = 0
-    for step in program["early"] + [s for block in program["init"] for s in block["steps"]]:
-        try:
-            run(step)
-            ran += 1
-        except Exception as e:
-            errors.append({"node": step["node"], "class": step["class"], "file": step["file"], "line": step["line"],
-                           "error": "%s: %s" % (type(e).__name__, e), "trace": traceback_text(e)})
+    ran = [0]
+
+    def run_steps(steps):
+        for step in steps:
+            try:
+                run(step)
+                ran[0] += 1
+            except Exception as e:
+                errors.append({"node": step["node"], "class": step["class"], "file": step["file"],
+                               "line": step["line"], "error": "%s: %s" % (type(e).__name__, e),
+                               "trace": traceback_text(e)})
+
+    steps = program["steps"]
+    labels = program["labels"]
+
+    def run_chain(start):
+        """One init block, followed as Ren'Py's execution context would:
+        through labels, calls and returns, ifs, loops and jumps."""
+        main = store_dicts["store"]
+        stack = []
+        i = start
+        while i is not None:
+            step = steps[str(i)]
+            i = step["next"]
+            kind = step["class"]
+            try:
+                missing.where = (step["file"], step["line"])
+                if kind in ("Call", "Jump"):
+                    label = eval(source(step["expression"]), main) if "expression" in step else step["label"]
+                    if label not in labels:
+                        raise Exception("init code reaches label %r, which the program doesn't hold" % label)
+                    if kind == "Call":
+                        stack.append(i)
+                    i = labels[label]
+                elif kind == "Return":
+                    i = stack.pop() if stack else None
+                elif kind == "If":
+                    for condition, block in step["entries"]:
+                        if eval(source(condition), main):
+                            i = block
+                            break
+                elif kind == "While":
+                    if eval(source(step["condition"]), main):
+                        i = step["block"]
+                elif kind != "Label":
+                    run(step)
+                ran[0] += 1
+            except Exception as e:
+                errors.append({"node": step["node"], "class": kind, "file": step["file"], "line": step["line"],
+                               "error": "%s: %s" % (type(e).__name__, e), "trace": traceback_text(e)})
+
+    loaded = set()
+
+    def load_rpym(name, **kwargs):
+        """renpy.load_module: a .rpym file's early work and init blocks, run
+        now, with `kwargs` set in the store while they run."""
+        if name in loaded:
+            return
+        loaded.add(name)
+        module = program["rpym"].get(name)
+        if module is None:
+            raise Exception("Module %s could not be loaded." % name)
+        old_locked = renpy.config.locked
+        renpy.config.locked = False
+        store = store_dicts["store"]
+        saved = dict((k, store.get(k, _ABSENT)) for k in kwargs)
+        store.update(kwargs)
+        where = missing.where
+        run_steps(module["early"])
+        for _priority, start in module["init"]:
+            run_chain(start)
+        missing.where = where
+        for k, v in saved.items():
+            if v is _ABSENT:
+                store.pop(k, None)
+            else:
+                store[k] = v
+        renpy.config.locked = old_locked
+
+    renpy.exports.load_module = load_rpym
+    attempt(("startup", 0), startup, load_rpym, program["rpym"])
+    run_steps(program["early"])
+    attempt(("persistent", 0), load_persistent)
+    for _priority, start in program["init"]:
+        run_chain(start)
 
     dumper = Dumper()
     stores = dict((name, dict((k, dumper.value(v)) for k, v in d.items() if not k.startswith("__")))
                   for name, d in store_dicts.items())
     with open(result_path, "w") as f:
-        json.dump({"ran": ran, "errors": errors, "missing": missing.report(), "store": stores,
+        json.dump({"ran": ran[0], "errors": errors, "missing": missing.report(), "store": stores,
                    "registries": {
                        "images": [[list(name), dumper.value(d)] for name, d in _charm.images.items()],
                        "screens": _charm.screens,
