@@ -24,6 +24,11 @@ class DisplayableArguments(renpy.object.Object):
         return rv
 
 
+class absolute(float):
+    """An absolute float coordinate: pixels, not a fraction."""
+    __slots__ = []
+
+
 default_style = renpy.style.Style("default")
 
 

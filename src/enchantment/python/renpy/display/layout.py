@@ -143,5 +143,94 @@ def ConditionSwitch(*args, **kwargs):
     return Position(rv, **kwargs)
 
 
+class Grid(Container):
+    def __init__(self, cols, rows, padding=None,
+                 transpose=False,
+                 style='grid', **properties):
+        if padding is not None:
+            properties.setdefault('spacing', padding)
+        super(Grid, self).__init__(style=style, **properties)
+        cols = int(cols)
+        rows = int(rows)
+        self.cols = cols
+        self.rows = rows
+        self.transpose = transpose
+
+
+def ShowingSwitch(*args, **kwargs):
+    layer = kwargs.pop('layer', 'master')
+    if len(args) % 2 != 0:
+        raise Exception('ShowingSwitch takes an even number of positional arguments')
+    condargs = []
+    for name, d in zip(args[0::2], args[1::2]):
+        if name is not None:
+            if not isinstance(name, tuple):
+                name = tuple(name.split())
+            cond = "renpy.showing(%r, layer=%r)" % (name, layer)
+        else:
+            cond = None
+        condargs.append(cond)
+        condargs.append(d)
+    return ConditionSwitch(*condargs, **kwargs)
+
+
+def Crop(rect, child, **properties):
+    return renpy.display.motion.Transform(child, crop=rect, **properties)
+
+
+class Side(Container):
+    possible_positions = set(['tl', 't', 'tr', 'r', 'br', 'b', 'bl', 'l', 'c'])
+    def __init__(self, positions, style='side', **properties):
+        super(Side, self).__init__(style=style, **properties)
+        if isinstance(positions, str):
+            positions = positions.split()
+        seen = set()
+        for i in positions:
+            if not i in Side.possible_positions:
+                raise Exception("Side used with impossible position '%s'." % (i,))
+            if i in seen:
+                raise Exception("Side used with duplicate position '%s'." % (i,))
+            seen.add(i)
+        self.positions = tuple(positions)
+        self.sized = False
+
+
+class Alpha(renpy.display.core.Displayable):
+    def __init__(self, start, end, time, child=None, repeat=False, bounce=False,
+                 anim_timebase=False, time_warp=None, **properties):
+        super(Alpha, self).__init__(**properties)
+        self.start = start
+        self.end = end
+        self.time = time
+        self.child = renpy.easy.displayable(child)
+        self.repeat = repeat
+        self.anim_timebase = anim_timebase
+        self.time_warp = time_warp
+
+
+class Tile(Container):
+    def __init__(self, child, style='tile', **properties):
+        super(LiveTile, self).__init__(style=style, **properties)
+        self.add(child)
+
+
+class Flatten(Container):
+    def __init__(self, child, **properties):
+        super(Flatten, self).__init__(**properties)
+        self.add(child)
+
+
+class AlphaMask(Container):
+    def __init__(self, child, mask, **properties):
+        super(AlphaMask, self).__init__(**properties)
+        self.add(child)
+        self.mask = renpy.easy.displayable(mask)
+        self.null = None
+
+
+LiveCrop = Crop
+LiveTile = Tile
+
+
 def __getattr__(name):
     return missing_attribute("renpy.display.layout", name)

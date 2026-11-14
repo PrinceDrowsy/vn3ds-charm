@@ -32,6 +32,31 @@ _TYPES = {"position": position, "any_object": any_object, "bool_or_none": bool_o
 PROPERTIES = {}
 
 
+def correct_type(v, b, ty):
+    if ty is position:
+        if v is None:
+            return None
+        return type(b)(v)
+    return ty(v)
+
+
+def interpolate(t, a, b, type):
+    """A property `t` of the way from `a` to `b`, as Ren'Py's ATL computes
+    it; Python motion functions (renpy.display.motion) call it."""
+    if isinstance(b, tuple):
+        if a is None:
+            a = [None] * len(b)
+        return tuple(interpolate(t, i, j, ty) for i, j, ty in zip(a, b, type))
+    elif b is None or isinstance(b, (bool, str)):
+        if t >= 1.0:
+            return b
+        return a
+    else:
+        if a is None:
+            a = 0
+        return correct_type(a + t * (b - a), b, type)
+
+
 class Context(object):
     """The names an ATL transform's expressions see beyond the store."""
 
