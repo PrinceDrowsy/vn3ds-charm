@@ -124,6 +124,15 @@ The first phases of `docs/REWORK-PLAN.md`: the bundle format and verifier
   `write_text` rewrites. *Prevention:* same as above; and
   `git ls-files --eol | grep crlf` now and then.
 
+- **A converter check that tested syntax, not meaning.** (R2.4) R2.2's
+  corpus check was "every snippet converts and compiles", and it passed,
+  but the plan's own list for R2.2 included Python 2's list-returning
+  `keys()`/`items()` and it had been left out. It surfaced only when Ren'Py's
+  common code ran: 33 of Jisei's 62 init errors were `view + view`.
+  *Prevention:* go through the plan's checklist item by item when closing a
+  step, and test a converter on behaviour (run the output), not only on
+  whether it compiles.
+
 ### What to do differently
 
 - Run the widest corpus as early as possible: the version differences

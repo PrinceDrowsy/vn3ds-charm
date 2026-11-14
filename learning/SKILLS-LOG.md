@@ -80,7 +80,10 @@
   fails on subclasses (use `super()`); no `vars`, `collections.defaultdict`,
   `copy`, `os.environ`; built-in modules are read-only (proxy them in
   `sys.modules`); module `__getattr__`, `exec` into dicts and overriding
-  built-ins all work.
+  built-ins all work. Functions take no attributes of their own
+  (`f.help = …`), which Ren'Py relies on: patched with a lazily created
+  dict per function (`0002-function-attributes.patch`, checked with
+  MicroPython's own basics suite, 534 tests).
 - **SKILL-012: Spike on the real target early,** with go/no-go numbers set in
   advance, and keep the spike's code (`spikes/hardware/`) so the numbers can
   be reproduced.
