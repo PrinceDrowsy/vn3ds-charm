@@ -1,0 +1,23 @@
+diff --git a/py/modmath.c b/py/modmath.c
+index 045c842..bb7a2d2 100644
+--- a/py/modmath.c
++++ b/py/modmath.c
+@@ -173,6 +173,9 @@ static mp_float_t MICROPY_FLOAT_C_FUN(copysign_func)(mp_float_t x, mp_float_t y)
+     return MICROPY_FLOAT_C_FUN(copysign)(x, y);
+ }
+ MATH_FUN_2(copysign, copysign_func)
++// Python 2.7 and 3 have these; games call them (Ren'Py's transforms use hypot).
++MATH_FUN_2(hypot, hypot)
++MATH_FUN_1(log1p, log1p)
+ // fabs(x)
+ static mp_float_t MICROPY_FLOAT_C_FUN(fabs_func)(mp_float_t x) {
+     return MICROPY_FLOAT_C_FUN(fabs)(x);
+@@ -421,6 +424,8 @@ static const mp_rom_map_elem_t mp_module_math_globals_table[] = {
+     { MP_ROM_QSTR(MP_QSTR_atan2), MP_ROM_PTR(&mp_math_atan2_obj) },
+     { MP_ROM_QSTR(MP_QSTR_ceil), MP_ROM_PTR(&mp_math_ceil_obj) },
+     { MP_ROM_QSTR(MP_QSTR_copysign), MP_ROM_PTR(&mp_math_copysign_obj) },
++    { MP_ROM_QSTR(MP_QSTR_hypot), MP_ROM_PTR(&mp_math_hypot_obj) },
++    { MP_ROM_QSTR(MP_QSTR_log1p), MP_ROM_PTR(&mp_math_log1p_obj) },
+     { MP_ROM_QSTR(MP_QSTR_fabs), MP_ROM_PTR(&mp_math_fabs_obj) },
+     { MP_ROM_QSTR(MP_QSTR_floor), MP_ROM_PTR(&mp_math_floor_obj) },
+     { MP_ROM_QSTR(MP_QSTR_fmod), MP_ROM_PTR(&mp_math_fmod_obj) },
