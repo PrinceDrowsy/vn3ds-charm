@@ -10,6 +10,7 @@ devkitPro (DEVKITPRO_ROOT, default C:/devkitPro). Temp files follow TMP.
 """
 from __future__ import annotations
 
+import ctypes
 import os
 import subprocess
 import sys
@@ -35,8 +36,15 @@ COMMON_FLAGS = ["-std=gnu11", "-O2", "-DNDEBUG", "-Wall", "-ffunction-sections",
 
 def posix(path: Path) -> str:
     """A Windows path as MSYS2 spells it."""
-    p = path.resolve().as_posix()
+    p = (path if path.is_absolute() else path.resolve()).as_posix()
     return f"/{p[0].lower()}{p[2:]}" if len(p) > 1 and p[1] == ":" else p
+
+
+def short_path(path: Path) -> Path:
+    """The 8.3 form of a path, without spaces: make splits paths on them."""
+    buf = ctypes.create_unicode_buffer(1024)
+    ctypes.windll.kernel32.GetShortPathNameW(str(path), buf, len(buf))
+    return Path(buf.value)
 
 
 def msys_env() -> dict:
@@ -59,7 +67,7 @@ def embed_package() -> None:
               f"BUILD='{posix(GENERATED)}' PACKAGE_DIR='{posix(EMBED)}' "
               # An absolute interpreter: a bare `python3` on Windows can reach
               # the Python install manager's alias, which installs Python.
-              f"PYTHON='{posix(Path(sys.base_prefix) / 'python.exe')}'")
+              f"PYTHON='{posix(short_path(Path(sys.base_prefix) / 'python.exe'))}'")
     run([MSYS2 / "usr" / "bin" / "bash.exe", "-c", script], env=msys_env())
 
 
