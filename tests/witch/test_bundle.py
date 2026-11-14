@@ -11,16 +11,16 @@ from witch.bundle.writer import Writer
 def _script():
     w = Writer()
     cond = w.code("points > 2")
-    start = w.node("label", node_id="start", file="game/script.rpy", line=1, name="start")
+    start = w.node("label", {"name": "start"}, node_id="start", file="game/script.rpy", line=1)
     who = w.code("e")
-    say = w.node("say", node_id="say1", who=who, what="Hello, 世界", attributes=["happy"], flags={"interact"})
-    yes = w.node("jump", target="good")
-    menu = w.node("menu", items=[
+    say = w.node("say", {"who": who, "what": "Hello, 世界", "attributes": ["happy"]}, node_id="say1", flags={"interact"})
+    yes = w.node("jump", {"target": "good"})
+    menu = w.node("menu", {"items": [
         {"label": "Pick one"},
         {"label": "Yes", "condition": cond, "block": yes},
-    ])
-    good = w.node("label", node_id="good", name="good")
-    show = w.node("show", name=["eileen", "happy"], at=[w.code("left")], layer="master")
+    ]})
+    good = w.node("label", {"name": "good"}, node_id="good")
+    show = w.node("show", {"name": ["eileen", "happy"], "at": [w.code("left")], "layer": "master"})
     w.link(start, say, menu)
     w.link(good, show)
     w.label("start", start)
@@ -60,8 +60,8 @@ def test_assets_are_sorted_by_path_and_references_follow():
     w = Writer()
     z = w.asset("images/z.png", b"zz", width=2, height=1)
     a = w.asset("images/a.png", b"a")
-    w.image("zed", w.disp("image", asset=z))
-    w.image("ay", w.disp("image", asset=a))
+    w.image("zed", w.disp("image", {"asset": z}))
+    w.image("ay", w.disp("image", {"asset": a}))
     b = Bundle(w.write())
 
     assert [b.asset(i).path for i in range(b.count("ASST"))] == ["images/a.png", "images/z.png"]
@@ -73,7 +73,7 @@ def test_assets_are_sorted_by_path_and_references_follow():
 
 def test_strings_are_shared():
     w = Writer()
-    w.link(w.node("jump", target="x"), w.node("jump", target="x"))
+    w.link(w.node("jump", {"target": "x"}), w.node("jump", {"target": "x"}))
     w.label("x", 0)
     data = w.write()
     assert data.count(b"x\0") == 1
@@ -91,7 +91,7 @@ def test_sections_are_aligned_and_size_matches():
 
 def test_writer_rejects_unknown_fields():
     w = Writer()
-    w.node("jump", tagret="x")
+    w.node("jump", {"tagret": "x"})
     with pytest.raises(TypeError, match="tagret"):
         w.write()
 

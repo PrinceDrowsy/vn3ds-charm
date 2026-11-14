@@ -49,10 +49,11 @@ class Writer:
         self._disps: list[_Record] = []
         self._images: dict[str, int] = {}
 
-    def node(self, kind: str, *, node_id: str = "", file: str = "", line: int = 0, flags=(), **fields) -> int:
-        """`node_id` is Ren'Py's own node name, the id saves refer to."""
+    def node(self, kind: str, fields: dict | None = None, *, node_id: str = "", file: str = "", line: int = 0,
+             flags=()) -> int:
+        """`fields` is the kind's payload; `node_id` is Ren'Py's own node name, the id saves refer to."""
         k = schema.NODE_KIND_BY_NAME[kind]
-        self._nodes.append(_Record(k, _flag_bits(k, flags), fields, name=node_id, file=file, line=line))
+        self._nodes.append(_Record(k, _flag_bits(k, flags), fields or {}, name=node_id, file=file, line=line))
         return len(self._nodes) - 1
 
     def link(self, *nodes: int) -> None:
@@ -76,9 +77,9 @@ class Writer:
         self._assets.append(_Asset(path, data, schema.ASSET_TYPE[type], width, height))
         return len(self._assets) - 1
 
-    def disp(self, kind: str, *, flags=(), **fields) -> int:
+    def disp(self, kind: str, fields: dict | None = None, *, flags=()) -> int:
         k = schema.DISP_KIND_BY_NAME[kind]
-        self._disps.append(_Record(k, _flag_bits(k, flags), fields))
+        self._disps.append(_Record(k, _flag_bits(k, flags), fields or {}))
         return len(self._disps) - 1
 
     def image(self, name: str, disp: int) -> None:

@@ -21,10 +21,10 @@ def test_committed_header_is_up_to_date():
 
 def _bundle() -> bytes:
     w = Writer()
-    start = w.node("label", name="start")
-    say = w.node("say", what="こんにちは", flags={"interact"})
-    after = w.node("label", name="after")
-    menu = w.node("menu", items=[{"label": "Which?"}, {"label": "That one", "block": after}])
+    start = w.node("label", {"name": "start"})
+    say = w.node("say", {"what": "こんにちは"}, flags={"interact"})
+    after = w.node("label", {"name": "after"})
+    menu = w.node("menu", {"items": [{"label": "Which?"}, {"label": "That one", "block": after}]})
     w.link(start, say, menu)
     w.label("start", start)
     w.label("after", after)
