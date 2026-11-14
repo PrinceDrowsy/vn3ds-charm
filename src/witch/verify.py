@@ -119,6 +119,10 @@ class _Checker:
         reach = self.reach[node.index]
         f = node.fields
         kind = node.kind.name
+        if "atl" in node.flags:
+            self._add("atl-not-carried", "mismatch", reach, node,
+                      f"This `{kind}` has an ATL block, which isn't carried into the bundle yet.",
+                      "ATL is harvested in R4.")
         if kind == "unknown":
             self._add("unsupported-statement", "missing", reach, node,
                       f"Ren'Py statement `{f['classname']}` has no Enchantment equivalent; it would do nothing.",
