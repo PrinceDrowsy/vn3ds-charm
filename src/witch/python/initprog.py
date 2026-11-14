@@ -56,7 +56,7 @@ def _step(harvest: dict, index: int) -> dict:
     elif n["class"] == "Image":
         step.update(name=f["imgname"], atl=bool(f.get("atl")))
     elif n["class"] == "Transform":
-        step.update(store=f.get("store") or "store", varname=f["varname"])
+        step.update(store=f.get("store") or "store", varname=f["varname"], parameters=f.get("parameters"))
     elif n["class"] == "Style":
         step.update(name=f.get("style_name"), parent=f.get("parent"))
     elif n["class"] == "Screen":

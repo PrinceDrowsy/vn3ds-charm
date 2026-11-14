@@ -8,9 +8,12 @@ import io
 import json
 import sys
 
-# Pure-Python stand-ins for standard modules MicroPython doesn't ship.
+# Pure-Python stand-ins for standard modules MicroPython doesn't ship, and
+# the convert-time engine port.
 sys.path.append("stdlib")
+sys.path.append("convert")
 
+import _charm  # noqa: E402
 import charm_stdlib  # noqa: E402
 import renpy  # noqa: E402
 from renpy import missing, py2, revertable  # noqa: E402
@@ -18,27 +21,53 @@ from renpy.python import StoreModule, create_store, store_dicts  # noqa: E402
 
 
 def run(step):
+    """One init statement, as Ren'Py 7.0's ast.py executes it. Expressions
+    evaluate in the main store whatever store the statement names."""
     kind = step["class"]
     missing.where = (step["file"], step["line"])
+    main = store_dicts["store"]
     if kind in ("Python", "EarlyPython"):
         exec(code(step, "code"), create_store(step["store"]))
     elif kind == "Define":
         store = create_store(step["store"])
-        value = eval(code(step, "code"), store)
+        value = eval(code(step, "code"), main)
+        special = renpy.config.special_namespaces.get(step["store"])
         if "index" in step:
-            store[step["varname"]][eval(code(step, "index"), store)] = value
-        elif step["operator"] == "=":
-            store[step["varname"]] = value
-        else:
+            store[step["varname"]][eval(code(step, "index"), main)] = value
+        elif step["operator"] != "=":
             # Ren'Py 8's `define x += y` and friends.
             store[step["varname"]] = eval("_a %s _b" % step["operator"][:-1], {"_a": store[step["varname"]],
                                                                                "_b": value})
+        elif special is not None:
+            special.set(step["varname"], value)
+        else:
+            store[step["varname"]] = value
+    elif kind == "Default":
+        special = renpy.config.special_namespaces.get(step["store"])
+        if special is not None:
+            special.set_default(step["varname"], eval(code(step, "code"), main))
+        else:
+            # Evaluated when the game starts (or a save without it loads).
+            create_store(step["store"])
+            _charm.default(step["store"], step["varname"], step["node"])
+    elif kind == "Image":
+        if "code" in step:
+            image = eval(code(step, "code"), main)
+        else:
+            image = renpy.display.transform.ATLTransform(step["node"])
+        renpy.exports.image(tuple(step["name"]), image)
+    elif kind == "Transform":
+        transform = renpy.display.transform.ATLTransform(step["node"], parameters=step["parameters"])
+        create_store(step["store"])[step["varname"]] = transform
+    elif kind == "Screen":
+        _charm.screen(step["name"], step["node"])
+    elif kind == "TranslateString":
+        _charm.translate_string(step["language"], step["old"], step["new"])
     elif kind == "Pass":
         pass
     else:
-        # Images, transforms, styles, screens, translations and defaults go
-        # into Ren'Py's registries rather than the store; the shim takes them
-        # on as it grows. Until then they're listed, not run.
+        # Styles join with the style descriptions (R2.4c). Until then
+        # they're listed, not run.
         missing.record("statement " + kind)
 
 
@@ -212,7 +241,13 @@ def main(program_path, result_path):
     stores = dict((name, dict((k, dumper.value(v)) for k, v in d.items() if not k.startswith("__")))
                   for name, d in store_dicts.items())
     with open(result_path, "w") as f:
-        json.dump({"ran": ran, "errors": errors, "missing": missing.report(), "store": stores}, f)
+        json.dump({"ran": ran, "errors": errors, "missing": missing.report(), "store": stores,
+                   "registries": {
+                       "images": [[list(name), dumper.value(d)] for name, d in _charm.images.items()],
+                       "screens": _charm.screens,
+                       "defaults": [list(d) for d in _charm.defaults],
+                       "strings": _charm.strings,
+                   }}, f)
 
 
 main(sys.argv[1], sys.argv[2])
