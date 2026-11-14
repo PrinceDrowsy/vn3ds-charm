@@ -824,6 +824,22 @@ The old pipeline is frozen (D22).
     - Azahar came within about 15% of these timings.
     - Next, H.2: per-callback breakdown, GC time against heap size, native
       ARM code from `mpy-cross`, and a working largest-allocation probe.
+  - **H.2 results, 2026-11-13, same console.** Per-frame workloads timed
+    one at a time over 600 frames, with collections kept out of the timed
+    calls:
+    - 3 ATL functions: 0.12 ms mean, 0.22 ms worst.
+    - A DynamicDisplayable: 0.08 ms mean, 0.17 ms worst.
+    - A 60-glyph kinetic text tag: 1.49 ms (offsets only) to 2.92 ms (an
+      object per glyph, closer to Mice Tea's) mean, 3.17 ms worst, and
+      5–8 KB of garbage per frame, because MicroPython boxes doubles.
+    - H.1's whole frame: 1.72 ms mean, 1.95 ms worst. H.1's 4.5 ms worst
+      case came from the test running 600 frames with GC disabled.
+    - `gc.collect()`: 161 / 130 / 114 ms for 16 / 8 / 4 MB heaps.
+    - Interaction worst 44.3 ms, SD as in H.1.
+    - Native code: the kernel granted executable memory
+      (`svcControlProcessMemory`). Loading then faulted on MicroPython's
+      privileged CP15 cache flush; fixed with an `MP_HAL_CLEAN_DCACHE` hook
+      for the next run.
 - **R1 — Harvester.**
   - Full harvest (§5) to the R0 schema, Jisei first, then the whole corpus
     as a running metric; the oracle frame-capture helper.

@@ -39,3 +39,7 @@ void *charm_commit_exec(void *fun_data, size_t len, void *reloc);
 #define MP_PLAT_FREE_EXEC(ptr, size)            ((void)(ptr), (void)(size))
 #define MP_PLAT_COMMIT_EXEC(fun_data, len, reloc) charm_commit_exec(fun_data, len, reloc)
 #define MP_STATE_PORT                           MP_STATE_VM
+// Without this hook MicroPython flushes caches with CP15 instructions, which
+// are privileged and fault in a 3DS app. charm_commit_exec has already
+// flushed through the kernel by the time this would run.
+#define MP_HAL_CLEAN_DCACHE(addr, size)         ((void)(addr), (void)(size))
