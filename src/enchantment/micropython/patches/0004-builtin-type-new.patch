@@ -1,0 +1,51 @@
+diff --git a/py/objtype.c b/py/objtype.c
+index 68a36ff..f575dc0 100644
+--- a/py/objtype.c
++++ b/py/objtype.c
+@@ -1063,6 +1063,30 @@ static mp_obj_t type_call(mp_obj_t self_in, size_t n_args, size_t n_kw, const mp
+     return o;
+ }
+ 
++#if MICROPY_CPYTHON_COMPAT
++// tuple.__new__(cls, ...) and the like, which Python code calls to build a
++// subclass of a built-in type: a native type is built as it is; a Python
++// subclass gets its native part made from the arguments, and its own
++// __init__ (if any) then runs as usual.
++static mp_obj_t native_type___new__(size_t n_args, const mp_obj_t *args) {
++    if (!mp_obj_is_type(args[0], &mp_type_type)) {
++        mp_raise_TypeError(MP_ERROR_TEXT("__new__ arg must be a type"));
++    }
++    const mp_obj_type_t *cls = MP_OBJ_TO_PTR(args[0]);
++    if (!mp_obj_is_instance_type(cls)) {
++        return MP_OBJ_TYPE_GET_SLOT(cls, make_new)(cls, n_args - 1, 0, args + 1);
++    }
++    const mp_obj_type_t *native_base = NULL;
++    mp_obj_instance_t *o = mp_obj_new_instance(cls, &native_base);
++    if (native_base == NULL) {
++        mp_raise_TypeError(MP_ERROR_TEXT("__new__ arg must be a built-in type's subclass"));
++    }
++    o->subobj[0] = MP_OBJ_TYPE_GET_SLOT(native_base, make_new)(native_base, n_args - 1, 0, args + 1);
++    return MP_OBJ_FROM_PTR(o);
++}
++static MP_DEFINE_CONST_FUN_OBJ_VAR(native_type___new___obj, 1, native_type___new__);
++#endif
++
+ static void type_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
+     assert(mp_obj_is_type(self_in, &mp_type_type));
+     mp_obj_type_t *self = MP_OBJ_TO_PTR(self_in);
+@@ -1116,6 +1140,15 @@ static void type_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
+             .is_type = true,
+         };
+         mp_obj_class_lookup(&lookup, self);
++        #if MICROPY_CPYTHON_COMPAT
++        if (dest[0] == MP_OBJ_NULL && attr == MP_QSTR___new__ && self != &mp_type_object) {
++            const mp_obj_type_t *native_base = NULL;
++            if (!mp_obj_is_instance_type(self)
++                || (instance_count_native_bases(self, &native_base) == 1 && native_base != &mp_type_object)) {
++                dest[0] = MP_OBJ_FROM_PTR(&native_type___new___obj);
++            }
++        }
++        #endif
+     } else {
+         // delete/store attribute
+ 
