@@ -56,7 +56,10 @@ def embed_package() -> None:
     (GENERATED / "charm_variant.h").write_text(f"#define CHARM_NANBOX {int(NANBOX)}\n")
     script = (f"cd '{posix(HERE)}' && make -f micropython_embed.mk "
               f"MICROPYTHON_TOP='{posix(MICROPYTHON)}' USER_C_MODULES='{posix(HERE / 'charm_module')}' "
-              f"BUILD='{posix(GENERATED)}' PACKAGE_DIR='{posix(EMBED)}' PYTHON=python")
+              f"BUILD='{posix(GENERATED)}' PACKAGE_DIR='{posix(EMBED)}' "
+              # An absolute interpreter: a bare `python3` on Windows can reach
+              # the Python install manager's alias, which installs Python.
+              f"PYTHON='{posix(Path(sys.base_prefix) / 'python.exe')}'")
     run([MSYS2 / "usr" / "bin" / "bash.exe", "-c", script], env=msys_env())
 
 

@@ -91,6 +91,19 @@ The first phases of `docs/REWORK-PLAN.md`: the bundle format and verifier
   hard-coded node index, a jump placed after another jump). Read the failure
   before changing the code under test.
 
+- **A build installed Python on the owner's machine.** (Found R2.3, caused
+  2026-11-13.) Building MicroPython's `mpy-cross` from Git Bash, its makefile
+  ran a bare `python3`, which Windows resolved to the Python install
+  manager's alias. That installed Python 3.15.2 into the build folder, added
+  Start Menu and Add/Remove Programs entries for it, removed Python 3.14's,
+  and updated the manager. Unnoticed for a day; found only through `git
+  status` in the MicroPython checkout. Cleaned up with the owner's approval
+  (registry backups in `D:\ClaudeScratch\python-cleanup-backup`), and 3.14's
+  registrations restored with `py install --refresh`.
+  *Prevention:* never run a build with a bare `python`/`python3` on Windows;
+  pass an absolute interpreter (`PYTHON=…`) and a PATH without WindowsApps.
+  *Lesson:* check `git status` and the filesystem after any tool's first run,
+  and read a build's log for anything it did beyond building.
 - **A catch-all `__getattr__` shadowed real submodules.** (R2.3) The shim's
   package-level `__getattr__` answered `from renpy import py2` with a
   placeholder, so the Python 2 helpers were silently never installed; it
