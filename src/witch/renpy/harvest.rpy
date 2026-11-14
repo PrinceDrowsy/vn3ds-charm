@@ -121,17 +121,25 @@ init 999999 python:
                 out["name"] = name
             return out
 
-        def slots(cls):
+        def field_names(n):
+            """A node's fields, wherever its Ren'Py declares them: __slots__
+            (up to 8.4), class annotations with class-level defaults (8.5),
+            or plain instance attributes."""
             names = []
-            for klass in cls.__mro__:
-                for name in getattr(klass, "__slots__", ()):
-                    if name not in names and name not in ("name", "filename", "linenumber", "next"):
-                        names.append(name)
-            return names
+            for klass in type(n).__mro__:
+                names.extend(getattr(klass, "__slots__", ()))
+                names.extend(getattr(klass, "__annotations__", {}))
+            names.extend(getattr(n, "__dict__", {}))
+            out = []
+            for name in names:
+                if (name not in out and not name.startswith("_")
+                        and name not in ("name", "filename", "linenumber", "next")):
+                    out.append(name)
+            return out
 
         def node_entry(n):
             fields = {}
-            for name in slots(type(n)):
+            for name in field_names(n):
                 if hasattr(n, name):
                     fields[name] = enc(getattr(n, name))
             return {
@@ -144,9 +152,11 @@ init 999999 python:
             }
 
         labels = {}
-        for key, n in script.namemap.items():
-            if isinstance(key, text_types):
-                labels[key] = index.get(id(n))
+        # Labels are the nodes with string names. Ren'Py 8.5 keys the map by
+        # the nodes themselves, so the name is read from the node.
+        for n in script.namemap.values():
+            if isinstance(n.name, text_types):
+                labels[n.name] = index.get(id(n))
 
         images = {}
         for name, d in renpy.display.image.images.items():
