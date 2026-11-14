@@ -881,6 +881,25 @@ The old pipeline is frozen (D22).
   - Full harvest (§5) to the R0 schema, Jisei first, then the whole corpus
     as a running metric; the oracle frame-capture helper.
   - Exit: Jisei harvests cleanly and its node count matches Ren'Py's own.
+  - **Jisei exit met 2026-11-13:** `python -m witch convert`; all 31281 of
+    Ren'Py's nodes, none outside the graph; no crash, stuck or unsupported
+    statement problems. What remains is R4's: 206 images, 82 ATL blocks.
+  - **First corpus run (`tools/witch/corpus.py`):** 10 of 15 games convert,
+    each matching Ren'Py's node count exactly (1.8 million nodes, Ren'Py
+    6.99–8.3). Open items, in order:
+    - `TranslateSay` (Ren'Py 8.2+, A Date with Death and Mice Tea) isn't
+      mapped yet.
+    - `call hide_windows` in `renpy/common/00keymap.rpy` (most games):
+      Ren'Py's own label, probably defined in a file the harvest misses.
+    - Real missing labels in game scripts: I Just Want to be Single!! (12),
+      Our Life (about 50), one or two elsewhere; check against Ren'Py
+      whether they're truly unreachable.
+    - Gender Bender DNA Twister Extreme: a Define/Default without `store`
+      (older Ren'Py).
+    - Katawa Shoujo: Ren'Py traceback during the harvest.
+    - DateWarp, Long Live the Queen, Magical Diary: no harvest in 600 s. Long
+      Live the Queen stopped on its own Steam Cloud error screen; the
+      harvester now sets `RENPY_NO_STEAM` and closes a stuck game.
 - **R2 — Logic.**
   - MicroPython build; py2→py3 normalization; the `renpy` shim; the init
     snapshot (§6.1) and the store serializer (D19); a conformance suite vs.
