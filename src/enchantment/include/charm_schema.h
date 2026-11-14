@@ -99,10 +99,11 @@ enum charm_asset_format {
 enum charm_code_mode {
     CHARM_CODE_MODE_EVAL = 0,
     CHARM_CODE_MODE_EXEC = 1,
-    CHARM_CODE_MODE_PARAMETERS = 2,
-    CHARM_CODE_MODE_ARGUMENTS = 3,
+    CHARM_CODE_MODE_HIDE = 2,
+    CHARM_CODE_MODE_PARAMETERS = 3,
+    CHARM_CODE_MODE_ARGUMENTS = 4,
 };
-#define CHARM_CODE_MODE_COUNT 4
+#define CHARM_CODE_MODE_COUNT 5
 
 typedef struct {
     uint32_t magic;

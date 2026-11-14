@@ -195,9 +195,11 @@ DISP_KINDS = (
 ASSET_TYPE = Enum("asset_type", ("other", "image", "audio", "font", "video"))
 # "source": the file's bytes as the game ships them; converted formats come with R4/R6.
 ASSET_FORMAT = Enum("asset_format", ("source",))
-# "parameters" is a def's parameter list (`a, b=1, *args`), "arguments" a
-# call's argument list (`x, y=2`), each as Python source without parentheses.
-CODE_MODE = Enum("code_mode", ("eval", "exec", "parameters", "arguments"))
+# Ren'Py's own modes: "eval", "exec", and "hide" (statements run in a fresh
+# local scope, for `python hide:`). Ours: "parameters" is a def's parameter
+# list (`a, b=1, *args`), "arguments" a call's argument list (`x, y=2`),
+# each as Python source without parentheses.
+CODE_MODE = Enum("code_mode", ("eval", "exec", "hide", "parameters", "arguments"))
 ENUMS = (ASSET_TYPE, ASSET_FORMAT, CODE_MODE)
 
 HEADER = Struct("header", [
