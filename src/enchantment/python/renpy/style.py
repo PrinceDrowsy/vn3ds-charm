@@ -7,7 +7,6 @@ with the game's own property tables (renpy.styledata.stylesets); nothing
 here computes a property's final value.
 """
 import renpy
-from renpy import missing
 from renpy.styledata import stylesets
 
 styles = {}  # name tuple -> style
@@ -32,6 +31,7 @@ def get_style(name):
     except Exception:
         raise Exception("Style %r does not exist." % name)
     rv = styles[nametuple] = Style(parent, name=nametuple)
+    changed()
     return rv
 
 
@@ -44,8 +44,10 @@ def get_or_create_style(name):
     # Both sides of the _, so _foo doesn't inherit from foo.
     if not start or not end:
         rv = styles[nametuple] = Style("default", name=nametuple)
+        changed()
         return rv
     rv = styles[nametuple] = Style(get_or_create_style(end), name=nametuple)
+    changed()
     return rv
 
 
@@ -89,6 +91,7 @@ class StyleManager(object):
         name = (name,)
         if value.name is None:
             value.name = name
+        changed()
         styles[name] = value
 
     __setitem__ = __setattr__
@@ -168,12 +171,15 @@ class StyleCore(object):
             return rv
         parent = self.parent + (name,) if self.parent is not None else None
         rv = styles[tname] = Style(parent, name=tname)
+        changed()
         return rv
 
     def setattr(self, property, value):
+        changed()
         self.properties.append({property: value})
 
     def delattr(self, property):
+        changed()
         for d in self.properties:
             if property in d:
                 del d[property]
@@ -184,28 +190,52 @@ class StyleCore(object):
             return
         if name not in stylesets.prefixed_all_properties:
             raise Exception("Style property {} is not known.".format(name))
+        changed()
         self.properties.append({name: value})
 
     def __getattr__(self, name):
-        # Reading a property resolves the style, which lands with lowering
-        # (R2.4d); until then the read is reported, and gives None.
-        if name in stylesets.prefixed_all_properties:
-            missing.record("style property read: " + name)
-            return None
+        # A property read gives its value for the style's current prefix,
+        # as Ren'Py's generated accessors do.
+        targets = _targets()
+        if name in targets:
+            return self._get(self.prefix + name)
         raise AttributeError(name)
+
+    def _get(self, key):
+        """`key` (a prefixed target property) from this style, its parent,
+        or for an indexed style the style it indexes, as Ren'Py's _get
+        walks them."""
+        s = self
+        left = None
+        for _ in range(100):
+            cache = build_style(s)
+            if key in cache:
+                return cache[key]
+            if left is None and s.name is not None and len(s.name) > 1:
+                left = get_full_style(s.name[:-1])
+            s = get_full_style(s.parent) if s.parent is not None else None
+            if s is None:
+                s = left
+                left = None
+            if s is None:
+                return None
+        raise Exception("{} is too complex. Check for loops in style inheritance.".format(self))
 
     def __delattr__(self, name):
         self.delattr(name)
 
     def set_parent(self, parent):
+        changed()
         self.parent = get_tuple_name(parent)
 
     def clear(self):
+        changed()
         self.properties = []
 
     def take(self, other):
         if not isinstance(other, StyleCore):
             other = get_style(other)
+        changed()
         self.properties = copy_properties(other.properties)
 
     def setdefault(self, **properties):
@@ -214,13 +244,88 @@ class StyleCore(object):
                 if k in properties:
                     del properties[k]
         if properties:
+            changed()
             self.properties.append(properties)
 
     def add_properties(self, properties):
+        changed()
         self.properties.append(dict(properties))
 
     def set_prefix(self, prefix):
         self.prefix = prefix
+
+
+def _targets():
+    global _target_set
+    if _target_set is None:
+        _target_set = set(t for rule in stylesets.rules.values() for t, _source, _f in rule)
+    return _target_set
+
+
+_target_set = None
+
+
+def _split(name):
+    """A prefixed property name as (prefix, property), or None."""
+    for prefix in sorted(stylesets.prefix_priority, key=len, reverse=True):
+        if name.startswith(prefix) and name[len(prefix):] in stylesets.rules:
+            return prefix, name[len(prefix):]
+    return None
+
+
+def _convert(function, value):
+    if function is None:
+        return value
+    if function == "expand_anchor":
+        return renpy.styledata.styleutil.expand_anchor(value)
+    if function == "color":
+        return renpy.easy.color(value)
+    if function == "displayable_or_none":
+        return renpy.easy.displayable_or_none(value)
+    return getattr(renpy.styledata.styleutil, function)(value)
+
+
+# Bumped by every change to any style; a style's built values are reused
+# until it moves.
+generation = 0
+
+
+def changed():
+    global generation
+    generation += 1
+
+
+def build_style(s):
+    """The values a style's own property dicts set, by prefixed target
+    property, with Ren'Py's priorities: a later dict wins over an earlier
+    one, and within a dict a more specific prefix or property wins."""
+    built = s.__dict__.get("__built")
+    if built is not None and built[0] == generation:
+        return built[1]
+    cache = {}
+    priorities = {}
+    priority = 1
+    for d in s.properties:
+        for k, v in d.items():
+            split = _split(k)
+            if split is None:
+                continue
+            prefix, prop = split
+            p = priority + stylesets.prefix_priority[prefix] + stylesets.property_priority.get(prop, 0)
+            for target, source, function in stylesets.rules[prop]:
+                if isinstance(source, dict):
+                    value = source["const"]
+                else:
+                    value = _convert(function, v if source == "value" else v[source])
+                for alt in stylesets.prefix_alts[prefix]:
+                    key = alt + target
+                    if p >= priorities.get(key, 0):
+                        cache[key] = value
+                        priorities[key] = p
+        priority += stylesets.priority_levels
+    # Kept out of the snapshot: the dumper skips dunder names.
+    object.__setattr__(s, "__built", (generation, cache))
+    return cache
 
 
 def copy_properties(p):
@@ -228,6 +333,7 @@ def copy_properties(p):
 
 
 def reset():
+    changed()
     styles.clear()
 
 
@@ -246,6 +352,7 @@ def backup():
 
 
 def restore(o):
+    changed()
     for i in list(styles):
         if i not in o:
             del styles[i]

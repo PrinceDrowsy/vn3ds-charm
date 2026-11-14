@@ -162,8 +162,10 @@ class Dumper:
             return {"missing": v._path}
         if isinstance(v, type):
             return {"class": qualified(v)}
-        if callable(v) and not hasattr(v, "__dict__"):
-            return {"function": qualified(v)}
+        if type(v).__name__ in ("function", "closure", "bound_method") or callable(v) and not hasattr(v, "__dict__"):
+            # Functions take attributes on this MicroPython (patch 0002), so
+            # they have a __dict__ too.
+            return {"function": qualified(getattr(v, "__func__", v))}
         if depth > 40:
             return {"too_deep": type(v).__name__}
         key = id(v)
@@ -188,7 +190,11 @@ class Dumper:
 
 
 def qualified(obj):
-    return "%s.%s" % (getattr(obj, "__module__", None) or "?", getattr(obj, "__name__", "?"))
+    module = getattr(obj, "__module__", None)
+    if module is None:
+        # MicroPython's functions have no __module__; their globals know.
+        module = getattr(obj, "__globals__", {}).get("__name__")
+    return "%s.%s" % (module or "?", getattr(obj, "__name__", "?"))
 
 
 def stand_in_modules(names, loaded):
@@ -272,16 +278,30 @@ def startup(load_rpym, rpym):
     renpy.style.build_styles()
 
 
-def load_persistent():
+def load_persistent(virtual_size):
     """What Ren'Py's main does between loading the script and running init:
-    persistent data (fresh on a first run) and the preferences it carries."""
+    persistent data and the preferences it carries, as on any launch after
+    the first, where the screen size init last ended with applies."""
     store = store_dicts["store"]
     persistent = sys.modules["renpy.persistent"]._dict["Persistent"]()
+    persistent._virtual_size = tuple(virtual_size)
+    renpy.config.screen_width, renpy.config.screen_height = persistent._virtual_size
     renpy.game.persistent = persistent
     renpy.game.preferences = persistent._preferences
     store["persistent"] = persistent
     store["_preferences"] = persistent._preferences
     store["_test"] = renpy.test.testast._test
+
+
+def resolved(style, dumper):
+    """A style's non-None values, in the form harvest.rpy gives Ren'Py's."""
+    values = {}
+    for prefix in ("insensitive_", "idle_", "hover_", "selected_idle_", "selected_hover_"):
+        for target in renpy.style._targets():
+            v = style._get(prefix + target)
+            if v is not None:
+                values[prefix + target] = dumper.value(v)
+    return values
 
 
 def main(program_path, result_path):
@@ -403,7 +423,7 @@ def main(program_path, result_path):
     attempt(("atl", 0), renpy.atl.load_properties, program["atl_properties"])
     attempt(("startup", 0), startup, load_rpym, program["rpym"])
     run_steps(program["early"])
-    attempt(("persistent", 0), load_persistent)
+    attempt(("persistent", 0), load_persistent, program["virtual_size"])
     for _priority, start in program["init"]:
         run_chain(start)
 
@@ -418,6 +438,8 @@ def main(program_path, result_path):
                        "defaults": [list(d) for d in _charm.defaults],
                        "strings": _charm.strings,
                        "styles": [[list(name), dumper.value(style)] for name, style in renpy.style.styles.items()],
+                       "resolved_styles": [[list(name), resolved(style, dumper)]
+                                           for name, style in renpy.style.styles.items()],
                        "deferred_styles": renpy.translation.deferred_styles,
                        "channels": dict((name, dumper.value(c)) for name, c in renpy.audio.audio.channels.items()),
                    }}, f)
