@@ -84,6 +84,18 @@
   (`f.help = …`), which Ren'Py relies on: patched with a lazily created
   dict per function (`0002-function-attributes.patch`, checked with
   MicroPython's own basics suite, 534 tests).
+- **SKILL-015: Produce, check, fall back.** When part of an original
+  engine has to be rewritten by hand (D27's description classes), have
+  the rewrite produce the output, have the original engine produce the
+  same output in a neutral form, and compare on every conversion. Where
+  the two differ and the output doesn't depend on runtime state, ship the
+  original's. A hand-written layer then can't silently drift, and every
+  game converted is a conformance run.
+- **SKILL-016: Decide a boundary from measurements, at the original's own
+  seams.** D27 came from five numbers (source size, heap per line,
+  per-frame cost, how much the public API moves across versions, how many
+  games subclass the API), not from taste; and the zones follow what
+  Ren'Py itself compiled versus left in Python.
 - **SKILL-012: Spike on the real target early,** with go/no-go numbers set in
   advance, and keep the spike's code (`spikes/hardware/`) so the numbers can
   be reproduced.
