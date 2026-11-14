@@ -1,0 +1,102 @@
+diff --git a/py/objclosure.c b/py/objclosure.c
+index 3ba507b..d828178 100644
+--- a/py/objclosure.c
++++ b/py/objclosure.c
+@@ -27,6 +27,7 @@
+ #include <string.h>
+ 
+ #include "py/obj.h"
++#include "py/objfun.h"
+ #include "py/runtime.h"
+ 
+ typedef struct _mp_obj_closure_t {
+@@ -82,6 +83,13 @@ static void closure_print(const mp_print_t *print, mp_obj_t o_in, mp_print_kind_
+ static void mp_obj_closure_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
+     // forward to self_in->fun
+     mp_obj_closure_t *o = MP_OBJ_TO_PTR(self_in);
++    if (dest[0] != MP_OBJ_NULL) {
++        // store or delete, kept on the function the closure wraps
++        if (mp_obj_is_type(o->fun, &mp_type_fun_bc)) {
++            mp_obj_fun_bc_attr(o->fun, attr, dest);
++        }
++        return;
++    }
+     mp_load_method_maybe(o->fun, attr, dest);
+ }
+ #define CLOSURE_TYPE_ATTR attr, mp_obj_closure_attr,
+diff --git a/py/objfun.c b/py/objfun.c
+index 5f2a10c..aaf86f6 100644
+--- a/py/objfun.c
++++ b/py/objfun.c
+@@ -353,12 +353,45 @@ static mp_obj_t fun_bc_call(mp_obj_t self_in, size_t n_args, size_t n_kw, const
+ }
+ 
+ #if MICROPY_PY_FUNCTION_ATTRS
++static mp_obj_dict_t *fun_bc_dict(mp_obj_fun_bc_t *self) {
++    if (self->dict == NULL) {
++        self->dict = MP_OBJ_TO_PTR(mp_obj_new_dict(0));
++    }
++    return self->dict;
++}
++
+ void mp_obj_fun_bc_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
++    mp_obj_fun_bc_t *self = MP_OBJ_TO_PTR(self_in);
+     if (dest[0] != MP_OBJ_NULL) {
+-        // not load attribute
++        // store or delete: functions take any attribute, as in CPython,
++        // except the ones computed below, which stay read-only
++        if (attr == MP_QSTR___name__ || attr == MP_QSTR___globals__ || attr == MP_QSTR___dict__
++            #if MICROPY_PY_FUNCTION_ATTRS_CODE
++            || attr == MP_QSTR___code__
++            #endif
++            ) {
++            return;
++        }
++        if (dest[1] != MP_OBJ_NULL) {
++            mp_obj_dict_store(MP_OBJ_FROM_PTR(fun_bc_dict(self)), MP_OBJ_NEW_QSTR(attr), dest[1]);
++            dest[0] = MP_OBJ_NULL;
++        } else if (self->dict != NULL
++                   && mp_map_lookup(&self->dict->map, MP_OBJ_NEW_QSTR(attr), MP_MAP_LOOKUP_REMOVE_IF_FOUND) != NULL) {
++            dest[0] = MP_OBJ_NULL;
++        }
++        return;
++    }
++    if (attr == MP_QSTR___dict__) {
++        dest[0] = MP_OBJ_FROM_PTR(fun_bc_dict(self));
+         return;
+     }
+-    const mp_obj_fun_bc_t *self = MP_OBJ_TO_PTR(self_in);
++    if (self->dict != NULL) {
++        mp_map_elem_t *elem = mp_map_lookup(&self->dict->map, MP_OBJ_NEW_QSTR(attr), MP_MAP_LOOKUP);
++        if (elem != NULL) {
++            dest[0] = elem->value;
++            return;
++        }
++    }
+     if (attr == MP_QSTR___name__) {
+         dest[0] = MP_OBJ_NEW_QSTR(mp_obj_fun_bc_get_name(self));
+     }
+@@ -442,6 +475,9 @@ mp_obj_t mp_obj_new_fun_bc(const mp_obj_t *def_args, const byte *code, const mp_
+     o->bytecode = code;
+     o->context = context;
+     o->child_table = child_table;
++    #if MICROPY_PY_FUNCTION_ATTRS
++    o->dict = NULL;
++    #endif
+     if (def_pos_args != NULL) {
+         memcpy(o->extra_args, def_pos_args->items, n_def_args * sizeof(mp_obj_t));
+     }
+diff --git a/py/objfun.h b/py/objfun.h
+index 0294a44..f8b47a4 100644
+--- a/py/objfun.h
++++ b/py/objfun.h
+@@ -37,6 +37,9 @@ typedef struct _mp_obj_fun_bc_t {
+     #if MICROPY_PY_SYS_SETTRACE
+     const struct _mp_raw_code_t *rc;
+     #endif
++    #if MICROPY_PY_FUNCTION_ATTRS
++    mp_obj_dict_t *dict;                        // attributes set on the function, created on first set
++    #endif
+     // the following extra_args array is allocated space to take (in order):
+     //  - values of positional default args (if any)
+     //  - a single slot for default kw args dict (if it has them)
