@@ -1,8 +1,12 @@
+import ast
 import struct
+import textwrap
 import zlib
+from pathlib import Path
 
 import pytest
 
+from witch.renpy import harvester
 from witch.renpy.harvester import HarvestError, find_launcher, relaunches_through_steam
 
 CALL = b"if sapi.SteamAPI_RestartAppIfNecessary(steam_appid):\n    raise SystemExit(3)\n"
@@ -37,3 +41,12 @@ def test_launcher_is_the_exe_named_after_the_script(tmp_path):
     (tmp_path / "Game.exe").unlink()
     with pytest.raises(HarvestError):
         find_launcher(tmp_path)
+
+
+def test_the_harvest_script_is_valid_python():
+    # A script Ren'Py can't parse stops the game on its error screen, in a
+    # window on the owner's desktop. Its Python runs on Python 2 as well, so
+    # this checks the syntax both share.
+    script = (Path(harvester.__file__).parent / "harvest.rpy").read_text(encoding="utf-8")
+    header, body = script.split("init 999999 python:\n", 1)
+    ast.parse(textwrap.dedent(body))

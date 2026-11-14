@@ -19,6 +19,7 @@ import zlib
 from datetime import datetime
 from pathlib import Path
 
+from ..bundle.descriptions import table
 from .steamstub import export_names, stub_dll
 
 HARVEST_RPY = Path(__file__).with_name("harvest.rpy")
@@ -114,13 +115,18 @@ def harvest(game_dir: Path, scratch: Path, timeout: float = 600) -> dict:
         _stand_in_for_steam(game_dir, copy)
     out = scratch / f"{game_dir.name}.harvest.json"
     error = out.with_name(out.name + ".error")  # written by harvest.rpy itself
-    traceback = copy / "traceback.txt"  # written by Ren'Py
-    for stale in (out, error, traceback):
+    traceback = copy / "traceback.txt"  # written by Ren'Py when code fails
+    parse_errors = copy / "errors.txt"  # written by Ren'Py when a script doesn't parse
+    for stale in (out, error, traceback, parse_errors):
         stale.unlink(missing_ok=True)
 
     # RENPY_NO_STEAM is Ren'Py's own switch: without it, a harvest would sign
     # in to Steam as the game and count as playtime.
-    env = dict(os.environ, WITCH_HARVEST_OUT=str(out), RENPY_NO_STEAM="1")
+    # harvest.rpy lowers Ren'Py's display objects with Witch's description
+    # table, handed over as a file.
+    descriptions = scratch / "descriptions.json"
+    descriptions.write_text(json.dumps(table()), encoding="utf-8")
+    env = dict(os.environ, WITCH_HARVEST_OUT=str(out), WITCH_DESCRIPTIONS=str(descriptions), RENPY_NO_STEAM="1")
     # The environment variable starts the harvest (see harvest.rpy), so no
     # positional arguments are needed; launchers differ in which they add.
     # Ren'Py's .exe may hand off to the real engine process and return at
@@ -133,7 +139,7 @@ def harvest(game_dir: Path, scratch: Path, timeout: float = 600) -> dict:
     while time.monotonic() < deadline:
         if out.exists():
             return json.loads(out.read_text(encoding="utf-8"))
-        for report in (error, traceback):
+        for report in (error, traceback, parse_errors):
             if report.exists():
                 time.sleep(0.5)  # let it finish writing
                 _stop(copy)
