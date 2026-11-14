@@ -96,3 +96,25 @@
 - Found along the way: Git for Windows' `mingw64\bin` on PATH ahead of
   MSYS2's makes cc1 load the wrong DLLs and exit `0xC0000139` with no
   message. The C test puts the compiler's own directory first.
+
+## Rework phase H — Hardware spike (2026-11-13)
+
+Old 3DS, `.3dsx` over 3dslink, MicroPython 1.29.0 through its embed port,
+synthetic Mice Tea-sized workload (`spikes/hardware/`). Five hardware runs.
+
+- **Interaction** (say, 2 layered shows, 5-item menu, rollback snapshot):
+  worst 45.0 ms normal, 37.5 ms NaN-boxed, against 50 ms. Pass.
+- **Per-frame Python:** ATL functions and DynamicDisplayables 0.1–0.25 ms.
+  60-glyph kinetic text 1.4–4.9 ms (D26).
+- **GC:** 110–160 ms for 4–16 MB heaps; heap size barely matters (D25).
+- **Garbage per animated frame:** 5.49 KB → 0.79 KB with NaN-boxing (D24).
+- **Heap:** 1.16 MB, or 2.03 MB NaN-boxed, against 12 MB. Pass.
+- **Native ARM code:** runs (the kernel grants executable memory), but only
+  5–15% faster; not adopted.
+- **SD (stdio):** sequential read 8.9 MB/s, writes 1.4–6.0 MB/s, random 4 KB
+  reads 5.3 ms. Asset loads must be large, grouped and prefetched.
+- **Azahar** tracks hardware timings within about 15%, doesn't implement
+  `svcControlProcessMemory`, and reports a bogus app-memory-free figure.
+- Spike bugs found on the way: a malloc probe that "succeeded" at 512 MB
+  (replaced with mallinfo), a 600-frame GC-disabled loop that inflated H.1's
+  frame worst case, and MicroPython's privileged CP15 cache flush on ARM.

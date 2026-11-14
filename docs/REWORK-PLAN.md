@@ -35,6 +35,9 @@ Settled:
 | D21 | **Hardware truth early:** a spike (phase H) right after R0 measures MicroPython and memory on Old 3DS against go/no-go numbers, with a named fallback | §15 |
 | D22 | **The old pipeline is frozen:** no fixes or features for the MoonScript engine or the old parser/emitter. It stays in the repo, unchanged, until R9 removes it | §15 |
 | D23 | **Old 3DS is the only test hardware.** Every phase exit is measured on it. New-3DS-only paths (MVD video, high-speed mode, extra cores, the larger memory mode) are built behind runtime detection with the Old 3DS path as fallback, checked in Azahar's New 3DS mode where it emulates them, and listed as unverified on hardware until a New 3DS is available | §3, §15 |
+| D24 | **MicroPython is built NaN-boxed** (`MICROPY_OBJ_REPR_D`): doubles live in the object word, so float math stops allocating. Measured in phase H: 86% less garbage per animated frame and 17% faster interactions, for 75% more heap. MicroPython's native-code emitter is not used: it can't be combined with NaN-boxing and gained only 5–15% | §6, §15 |
+| D25 | **The logic VM runs on its own thread,** below the render thread's priority. A garbage collection (110–160 ms on Old 3DS, whatever the heap size) then delays Python but never a frame: transitions, ATL and video keep running, and a per-frame Python callback that misses its frame keeps its last value. Collections are requested at quiet points (the line fully shown, nothing animating) before the heap forces one | §6, §15 |
+| D26 | **Widely shared Ren'Py libraries are recognized and run natively,** as §7.3 does for shaders: the converter matches a game's copy against the known library source, and Enchantment runs a C version with identical output; anything modified falls back to the game's own Python. First: SoDaRa's Kinetic Text Tags (MIT), shipped by 3 of the 13 corpus games, whose per-glyph Python costs 1.4–4.9 ms a frame on Old 3DS | §8.4 |
 
 Open: nothing. The H and R3 re-reviews (D1) may reopen decisions with
 measured data.
@@ -242,9 +245,17 @@ has been ported to the 3DS before, e.g. LiquidFenrir's `3dspython`).
     are translated into Python by their front ends.
   - So there is one logic VM for every engine, not one per engine.
 - **Performance:** visual novel logic is light. The heavy work (rendering,
-  ATL, text, audio, video) is all C. MicroPython's heap is a fixed region
-  (sized per game from the corpus scan, typically 4–12 MB). Garbage
-  collection runs between interactions, never mid-animation.
+  ATL, text, audio, video) is all C. Measured on Old 3DS in phase H (§15):
+  a full interaction in 31–37 ms, ordinary per-frame callbacks in about
+  0.2 ms.
+  - MicroPython is NaN-boxed (D24), so float math doesn't allocate.
+  - Its heap is a fixed region, sized per game from the corpus scan
+    (typically 4–12 MB; NaN-boxing needs about 1.75× what normal objects
+    would).
+  - The VM runs on its own lower-priority thread (D25). A collection takes
+    110–160 ms on Old 3DS and can't be made incremental, so it must never
+    block rendering. Collections are requested at quiet points, before the
+    heap forces one.
 
 ### 6.1 Init at convert time
 
@@ -438,6 +449,10 @@ Script chunks load per source file or label range and unload when cold.
     and vertical text.
 - **Tags:** every built-in text tag, plus game-defined custom tags running in
   MicroPython. Kinetic tags animate glyphs individually.
+  - Recognized libraries run natively (D26). SoDaRa's Kinetic Text Tags
+    costs 1.4–4.9 ms a frame per 60 glyphs as Python on Old 3DS; its C
+    version must produce the same glyph placement, checked against the
+    oracle.
   - `{w}`, `{p}`, `{nw}`, `{fast}`, `{cps}`.
   - Typewriter speed uses Ren'Py's exact `cps` math.
 - Rendered lines are cached into render targets, so text costs nothing after
@@ -840,6 +855,28 @@ The old pipeline is frozen (D22).
       (`svcControlProcessMemory`). Loading then faulted on MicroPython's
       privileged CP15 cache flush; fixed with an `MP_HAL_CLEAN_DCACHE` hook
       for the next run.
+  - **H.2 rerun with native code.** Bytecode numbers within a few percent
+    of the first H.2 run. Native ARM code ran correctly but gained only
+    5–15% (H.1 frame worst 2.00 → 1.74 ms): the time goes to boxing floats
+    and allocating objects, not to the interpreter.
+  - **H.3, NaN-boxing (`MICROPY_OBJ_REPR_D`), same console:**
+    - Interaction: mean 31.1 ms, worst 37.5 ms (H.2: 36.7 / 45.0).
+    - Garbage per frame: H.1 frame 0.79 KB (5.49), ATL functions 0.01 KB
+      (0.40).
+    - Frame times about the same (H.1 frame worst 2.03 ms), except the
+      object-per-glyph kinetic text, 34% slower (4.86 ms worst).
+    - Heap in use 2.03 MB (1.16), so a 4 MB heap no longer fits this store.
+    - `gc.collect()` 141–156 ms: no shorter.
+    - Setup 7.0 s (5.1); D18 keeps it off the device.
+  - **Verdict: go.**
+    - MicroPython stays the logic VM (D9). An interaction fits the 50 ms
+      budget with a 25% margin; the heap is far under budget.
+    - Ordinary per-frame Python is cheap (0.1–0.25 ms).
+    - Two costs needed design answers rather than more speed: GC pauses,
+      which no heap size shortens (D24 makes them rarer, D25 keeps them off
+      the render thread), and per-glyph kinetic text (D26).
+    - Rechecked in R2 with real game code through the shim, and in R3 with
+      the threaded VM under the renderer.
 - **R1 — Harvester.**
   - Full harvest (§5) to the R0 schema, Jisei first, then the whole corpus
     as a running metric; the oracle frame-capture helper.
