@@ -63,10 +63,21 @@ class _Proxy:
             return getattr(self._module, name)
 
 
+def format(value, spec=""):
+    """The format() built-in MicroPython lacks: a value's own __format__ if
+    its class has one, else what str.format does with the spec."""
+    method = getattr(type(value), "__format__", None)
+    if method is not None:
+        return method(value, spec)
+    return ("{:" + spec + "}").format(value)
+
+
 _ABSENT_MODULES = ("tarfile", "threading", "urllib", "urllib.parse", "urllib.request", "subprocess", "zlib", "codecs", "pygame_sdl2")
 
 
 def install():
+    import builtins
+    builtins.format = format
     from renpy.missing import MissingModule
     for name in _ABSENT_MODULES:
         sys.modules[name] = MissingModule(name)
