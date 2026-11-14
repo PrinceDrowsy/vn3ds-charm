@@ -1,0 +1,166 @@
+diff --git a/py/objstr.c b/py/objstr.c
+index 0b044b7..ca0d41f 100644
+--- a/py/objstr.c
++++ b/py/objstr.c
+@@ -2063,6 +2063,129 @@ static mp_obj_t str_upper(mp_obj_t self_in) {
+ }
+ MP_DEFINE_CONST_FUN_OBJ_1(str_upper_obj, str_upper);
+ 
++#if MICROPY_CPYTHON_COMPAT
++// Python's str methods MicroPython leaves out, which game code uses. Case
++// changes are ASCII, as MicroPython's lower() and upper() are; the bytes
++// of a non-ASCII character count as a cased letter.
++static mp_obj_t str_recase(mp_obj_t self_in, int mode) {
++    GET_STR_DATA_LEN(self_in, data, len);
++    vstr_t vstr;
++    vstr_init_len(&vstr, len);
++    bool after_cased = false;
++    for (size_t i = 0; i < len; i++) {
++        byte c = data[i];
++        byte out = c;
++        if (mode == 0) { // capitalize
++            out = i == 0 ? unichar_toupper(c) : unichar_tolower(c);
++        } else if (mode == 1) { // title
++            if (unichar_isalpha(c)) {
++                out = after_cased ? unichar_tolower(c) : unichar_toupper(c);
++                after_cased = true;
++            } else {
++                after_cased = c >= 0x80;
++            }
++        } else { // swapcase
++            out = unichar_isupper(c) ? unichar_tolower(c) : unichar_toupper(c);
++        }
++        vstr.buf[i] = out;
++    }
++    return mp_obj_new_str_type_from_vstr(mp_obj_get_type(self_in), &vstr);
++}
++
++static mp_obj_t str_capitalize(mp_obj_t self_in) {
++    return str_recase(self_in, 0);
++}
++MP_DEFINE_CONST_FUN_OBJ_1(str_capitalize_obj, str_capitalize);
++
++static mp_obj_t str_title(mp_obj_t self_in) {
++    return str_recase(self_in, 1);
++}
++MP_DEFINE_CONST_FUN_OBJ_1(str_title_obj, str_title);
++
++static mp_obj_t str_swapcase(mp_obj_t self_in) {
++    return str_recase(self_in, 2);
++}
++MP_DEFINE_CONST_FUN_OBJ_1(str_swapcase_obj, str_swapcase);
++
++// ljust, rjust and zfill: padding to a width in characters
++static mp_obj_t str_pad(mp_obj_t self_in, mp_obj_t width_in, const byte *fill, size_t fill_len, int where) {
++    GET_STR_DATA_LEN(self_in, data, len);
++    mp_int_t width = mp_obj_get_int(width_in);
++    #if MICROPY_PY_BUILTINS_STR_UNICODE
++    mp_int_t chars = mp_obj_is_str(self_in) ? (mp_int_t)utf8_charlen(data, len) : (mp_int_t)len;
++    #else
++    mp_int_t chars = len;
++    #endif
++    if (chars >= width) {
++        return self_in;
++    }
++    size_t pad = width - chars;
++    vstr_t vstr;
++    vstr_init(&vstr, len + pad * fill_len);
++    size_t start = 0;
++    if (where == 2 && len > 0 && (data[0] == '+' || data[0] == '-')) { // zfill keeps the sign first
++        vstr_add_byte(&vstr, data[0]);
++        start = 1;
++    }
++    if (where == 0) {
++        vstr_add_strn(&vstr, (const char *)data, len);
++    }
++    for (size_t i = 0; i < pad; i++) {
++        vstr_add_strn(&vstr, (const char *)fill, fill_len);
++    }
++    if (where != 0) {
++        vstr_add_strn(&vstr, (const char *)data + start, len - start);
++    }
++    return mp_obj_new_str_type_from_vstr(mp_obj_get_type(self_in), &vstr);
++}
++
++static mp_obj_t str_just(size_t n_args, const mp_obj_t *args, int where) {
++    const byte *fill = (const byte *)" ";
++    size_t fill_len = 1;
++    if (n_args > 2) {
++        GET_STR_DATA_LEN(args[2], f, f_len);
++        fill = f;
++        fill_len = f_len;
++    }
++    return str_pad(args[0], args[1], fill, fill_len, where);
++}
++
++static mp_obj_t str_ljust(size_t n_args, const mp_obj_t *args) {
++    return str_just(n_args, args, 0);
++}
++MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(str_ljust_obj, 2, 3, str_ljust);
++
++static mp_obj_t str_rjust(size_t n_args, const mp_obj_t *args) {
++    return str_just(n_args, args, 1);
++}
++MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(str_rjust_obj, 2, 3, str_rjust);
++
++static mp_obj_t str_zfill(mp_obj_t self_in, mp_obj_t width_in) {
++    return str_pad(self_in, width_in, (const byte *)"0", 1, 2);
++}
++MP_DEFINE_CONST_FUN_OBJ_2(str_zfill_obj, str_zfill);
++
++static mp_obj_t str_remove_affix(mp_obj_t self_in, mp_obj_t affix_in, bool prefix) {
++    GET_STR_DATA_LEN(self_in, data, len);
++    GET_STR_DATA_LEN(affix_in, affix, affix_len);
++    if (affix_len == 0 || affix_len > len
++        || memcmp(prefix ? data : data + len - affix_len, affix, affix_len) != 0) {
++        return self_in;
++    }
++    return mp_obj_new_str_of_type(mp_obj_get_type(self_in), prefix ? data + affix_len : data, len - affix_len);
++}
++
++static mp_obj_t str_removeprefix(mp_obj_t self_in, mp_obj_t prefix_in) {
++    return str_remove_affix(self_in, prefix_in, true);
++}
++MP_DEFINE_CONST_FUN_OBJ_2(str_removeprefix_obj, str_removeprefix);
++
++static mp_obj_t str_removesuffix(mp_obj_t self_in, mp_obj_t suffix_in) {
++    return str_remove_affix(self_in, suffix_in, false);
++}
++MP_DEFINE_CONST_FUN_OBJ_2(str_removesuffix_obj, str_removesuffix);
++#endif
++
+ static mp_obj_t str_uni_istype(bool (*f)(unichar), mp_obj_t self_in) {
+     GET_STR_DATA_LEN(self_in, self_data, self_len);
+ 
+@@ -2106,6 +2229,13 @@ static mp_obj_t str_isalpha(mp_obj_t self_in) {
+ }
+ MP_DEFINE_CONST_FUN_OBJ_1(str_isalpha_obj, str_isalpha);
+ 
++#if MICROPY_CPYTHON_COMPAT
++static mp_obj_t str_isalnum(mp_obj_t self_in) {
++    return str_uni_istype(unichar_isalnum, self_in);
++}
++MP_DEFINE_CONST_FUN_OBJ_1(str_isalnum_obj, str_isalnum);
++#endif
++
+ static mp_obj_t str_isdigit(mp_obj_t self_in) {
+     return str_uni_istype(unichar_isdigit, self_in);
+ }
+@@ -2284,6 +2414,17 @@ static const mp_rom_map_elem_t array_bytearray_str_bytes_locals_table[] = {
+     #if MICROPY_PY_BUILTINS_STR_CENTER
+     { MP_ROM_QSTR(MP_QSTR_center), MP_ROM_PTR(&str_center_obj) },
+     #endif
++    #if MICROPY_CPYTHON_COMPAT
++    { MP_ROM_QSTR(MP_QSTR_capitalize), MP_ROM_PTR(&str_capitalize_obj) },
++    { MP_ROM_QSTR(MP_QSTR_title), MP_ROM_PTR(&str_title_obj) },
++    { MP_ROM_QSTR(MP_QSTR_swapcase), MP_ROM_PTR(&str_swapcase_obj) },
++    { MP_ROM_QSTR(MP_QSTR_ljust), MP_ROM_PTR(&str_ljust_obj) },
++    { MP_ROM_QSTR(MP_QSTR_rjust), MP_ROM_PTR(&str_rjust_obj) },
++    { MP_ROM_QSTR(MP_QSTR_zfill), MP_ROM_PTR(&str_zfill_obj) },
++    { MP_ROM_QSTR(MP_QSTR_removeprefix), MP_ROM_PTR(&str_removeprefix_obj) },
++    { MP_ROM_QSTR(MP_QSTR_removesuffix), MP_ROM_PTR(&str_removesuffix_obj) },
++    { MP_ROM_QSTR(MP_QSTR_isalnum), MP_ROM_PTR(&str_isalnum_obj) },
++    #endif
+     { MP_ROM_QSTR(MP_QSTR_lower), MP_ROM_PTR(&str_lower_obj) },
+     { MP_ROM_QSTR(MP_QSTR_upper), MP_ROM_PTR(&str_upper_obj) },
+     { MP_ROM_QSTR(MP_QSTR_isspace), MP_ROM_PTR(&str_isspace_obj) },
