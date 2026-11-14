@@ -86,16 +86,81 @@ init 999999 python:
                 args.append([None, text(info.extrakw)])
             return {"call": args, "starred": sorted(starred), "doublestarred": sorted(doublestarred)}
 
+        # Ren'Py 6.99-7.x compiles with print_function and unicode_literals
+        # and retries without them if that fails; Ren'Py 6.15-6.18 has no
+        # flags at all, a plain Python 2 parse.
+        new_flags = getattr(renpy.python, "new_compile_flags", 0)
+        old_flags = getattr(renpy.python, "old_compile_flags", 0)
+
         def needs_old_flags(source, mode):
-            """Ren'Py 6/7 compiles with print_function and unicode_literals,
-            and retries without them if that fails (py_compile)."""
+            if not new_flags:
+                return False
             escape = getattr(renpy.python, "escape_unicode", None)
             try:
                 compile(escape(source) if escape else source, "<witch>", "exec" if mode == "hide" else mode,
-                        ast.PyCF_ONLY_AST | renpy.python.new_compile_flags, 1)
+                        ast.PyCF_ONLY_AST | new_flags, 1)
                 return False
             except Exception:
                 return True
+
+        # Each snippet as Ren'Py itself would compile it: its own parser,
+        # compile flags, Python 2 fixes (8.x), literal wrapping and `python
+        # hide:` rewrite. On Python 3 that's written back as source; Python 2
+        # has no ast.unparse, so the tree is written as JSON for Witch to
+        # convert. Identical snippets share one entry.
+        compiled = []
+        compiled_keys = {}
+        py_compile = renpy.python.py_compile
+        has_ast_node = "ast_node" in py_compile.__code__.co_varnames
+
+        def compiled_index(source, mode):
+            key = (source + "", mode)
+            if key not in compiled_keys:
+                compiled_keys[key] = len(compiled)
+                compiled.append(compile_entry(source, mode))
+            return compiled_keys[key]
+
+        def compile_entry(source, mode):
+            try:
+                if has_ast_node:
+                    body = py_compile(source, mode, ast_node=True)
+                else:
+                    # Ren'Py 6.x: a plain Python 2 parse, then the wrap.
+                    text = (source + "").replace("\r", "")
+                    escape = getattr(renpy.python, "escape_unicode", None)
+                    tree = ast.parse(escape(text) if escape else text, "<witch>", mode)
+                    body = renpy.python.wrap_node.visit(tree).body
+            except Exception as e:
+                return {"error": "%s: %s" % (type(e).__name__, e)}
+            if py2:
+                return {"ast": dump_ast(body)}
+            if isinstance(body, builtins.list):
+                return {"source": ast.unparse(ast.Module(body=body, type_ignores=[]))}
+            return {"source": ast.unparse(body)}
+
+        def dump_ast(node):
+            if isinstance(node, ast.AST):
+                out = {"_": type(node).__name__}
+                for field in node._fields:
+                    value = getattr(node, field, None)
+                    if type(node).__name__ == "Str" and field == "s" and isinstance(value, builtins.str):
+                        out[field] = {"bytes": value.encode("hex")}  # a Python 2 str literal, not unicode
+                    else:
+                        out[field] = dump_ast(value)
+                return out
+            if isinstance(node, sequence_types):
+                return [dump_ast(x) for x in node]
+            if isinstance(node, builtins.str):
+                return node.decode("ascii")  # identifiers and other names
+            if isinstance(node, builtins.bool) or node is None:
+                return node
+            if isinstance(node, builtins.float):
+                return node if node == node and abs(node) != float("inf") else {"float": repr(node)}
+            if isinstance(node, builtins.complex):
+                return {"complex": repr(node)}
+            if isinstance(node, (builtins.int, getattr(builtins, "long", builtins.int))):
+                return node if -2**53 < node < 2**53 else {"int": builtins.str(node)}
+            return node
 
         def future_names(flags):
             import __future__
@@ -120,11 +185,13 @@ init 999999 python:
             if isinstance(value, renpy.ast.PyCode):
                 source = value.source
                 out = {"code": source if isinstance(source, text_types) else repr(source), "mode": value.mode}
-                if py2 and needs_old_flags(out["code"], value.mode):
-                    out["old_flags"] = True
+                if isinstance(source, text_types):  # Ren'Py 6.16 has code objects without source
+                    if py2 and needs_old_flags(source, value.mode):
+                        out["old_flags"] = True
+                    out["c"] = compiled_index(source, value.mode)
                 return out
             if isinstance(value, renpy.ast.PyExpr):
-                return {"expr": value + ""}
+                return {"expr": value + "", "c": compiled_index(value, "eval")}
             if isinstance(value, text_types):
                 return value
             if isinstance(value, sequence_types):
@@ -274,19 +341,24 @@ init 999999 python:
         # doesn't fit in a 32-bit Ren'Py 6. The file is written under a
         # temporary name and renamed, so a finished file means a finished harvest.
         with open(path + ".part", "w") as f:
-            f.write('{"harvest_version": 2, "renpy_version": %s, "screen_size": %s, "nodes": ['
+            f.write('{"harvest_version": 3, "renpy_version": %s, "screen_size": %s, "nodes": ['
                     % (json.dumps(renpy.version()), json.dumps([config.screen_width, config.screen_height])))
             for i, n in enumerate(nodes):
                 if i:
                     f.write(",\n")
                 json.dump(node_entry(n), f)
+            f.write('],\n"compiled": [')
+            for i, entry in enumerate(compiled):
+                if i:
+                    f.write(",\n")
+                json.dump(entry, f)
             f.write('],\n"labels": %s,\n"images": %s,\n"named_nodes": %d,\n"named_outside_graph": %d,\n'
                     '"unindexed_refs": %s,\n' % (json.dumps(labels), json.dumps(images), len(named),
                                                  len(named - builtins.set(index)), json.dumps(unknown_refs)))
             python = {"version": list(sys.version_info[:3])}
             if py2:
-                python["new_flags"] = future_names(renpy.python.new_compile_flags)
-                python["old_flags"] = future_names(renpy.python.old_compile_flags)
+                python["new_flags"] = future_names(new_flags)
+                python["old_flags"] = future_names(old_flags)
             file_flags = getattr(renpy.python, "file_compiler_flags", {})
             python["file_flags"] = dict((k, future_names(v)) for k, v in file_flags.items() if v)
             f.write('"python": %s,\n"initcode": %s,\n"config": ' % (json.dumps(python), json.dumps(initcode)))
