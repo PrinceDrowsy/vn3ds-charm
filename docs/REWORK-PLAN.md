@@ -1148,25 +1148,29 @@ The old pipeline is frozen (D22).
         harvested from the game's Ren'Py), init code as a graph (labels,
         calls, ifs, loops), and `.rpym` modules at their
         `renpy.load_module` call.
-      - **R2.4c progress, 2026-11-14:** Jisei's init runs every
-        statement (3,819) with no error, and every name in Ren'Py's own
-        store exists in ours, in every store, except one that only
-        exists with Steam present on the PC. Descriptions so far: styles
-        (a port of `style.pyx`'s data side), `im.*` and `im.matrix`,
-        `ImageReference`, `Solid`, `Frame`, the box layouts,
-        `ConditionSwitch`/`DynamicDisplayable`, `ParameterizedText`,
-        `renpy.Displayable`, `Character`, audio channels, the ATL property
-        table. Five MicroPython patches in all (`dict` from a mapping
-        subclass; function attributes; stepped slices; `__new__` on
-        built-in types; subclasses as right-hand operands, without which
-        `[1] == RevertableList([1])` was False). The converter now leaks
-        list-comprehension variables as Python 2 does. Standard modules
-        with no place on the device (the updater's `tarfile`, `zlib`,
-        `urllib`…) are reporting placeholders. Still to do: 243
-        placeholders are touched, mostly names `defaultstore` binds
-        (`Text`, `Transform`, the transitions, `renpy.ui` widgets) that
-        need descriptions before anything calls them; style property
-        reads give None until R2.4d.
+      - **R2.4c Done for Jisei, 2026-11-14.** Its init runs every
+        statement (3,819) with no error; every name in Ren'Py's own store
+        exists in ours, in every store, except one that only exists with
+        Steam present on the PC. The description classes cover every
+        displayable, transform, transition, motion, animation, particle,
+        widget and Character that Ren'Py 7.0's base store names, written
+        from 7.0's constructors; engine actions (menus, rollback, the say
+        window) are functions that raise if called during init. Seven
+        MicroPython patches (`dict` from a mapping subclass; function
+        attributes; stepped slices; `__new__` on built-in types; subclasses
+        as right-hand operands, without which `[1] == RevertableList([1])`
+        was False; `math.hypot`/`log1p`; the `str` methods games call) and
+        Python stand-ins for `random` (CPython's generator, matching
+        Python 2 and 3 draw for draw), `string.Formatter`, `format`,
+        `fnmatch`, `colorsys`, `contextlib`, `traceback`, `os.path`. The
+        converter also keeps Python 2's leaking list-comprehension
+        variables. Fourteen placeholders are still touched, each with a
+        later home: `renpy.loadsave` (the D19 serializer, R2.5), the style
+        property read (R2.4d), `Input` (R5), the gamepad's SDL constants
+        (R3), and developer and PC-only features (the director's use of
+        `renpy.ast`, testcases, the updater's threads). Not yet handled:
+        Unicode case mapping (`"é".upper()`), which MicroPython limits to
+        ASCII.
       - **R2.4d The check.** The harvester lowers the oracle's registries
         and the descriptions in its store to the same records, reading the
         style property tables from the game's own Ren'Py.
