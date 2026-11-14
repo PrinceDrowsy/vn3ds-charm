@@ -6,7 +6,7 @@ import struct
 from witch.__main__ import main
 from witch.bundle import schema
 from witch.bundle.writer import Writer
-from witch.verify import verify
+from witch.verify import Source, verify
 
 
 def _game(w: Writer | None = None) -> Writer:
@@ -181,20 +181,24 @@ def test_a_call_guarded_by_has_label_of_a_missing_label_is_dead():
     assert reaches == {"call hide_windows": "none", "call nowhere": "dynamic"}
 
 
-def test_a_label_the_original_lacks_too_is_inherited():
+def test_what_the_original_lacks_too_is_inherited():
     w = _game()
     x = w.node("label", {"name": "x"})
-    w.link(x, w.node("jump", {"target": "dlc_only"}))
+    w.link(x, w.node("show", {"name": ["rga", "wat"]}), w.node("jump", {"target": "dlc_only"}))
     w.label("x", x)
     y = w.node("label", {"name": "y"})
-    w.link(y, w.node("jump", {"target": "dropped"}))
+    w.link(y, w.node("show", {"name": ["lost"]}), w.node("jump", {"target": "dropped"}))
     w.label("y", y)
     data = w.write()
-    # Witch dropped `dropped`; the original never had `dlc_only`.
-    report = verify(data, source_labels={"start", "ending", "x", "y", "dropped"})
-    by_target = {p.message.split("`")[1]: p for p in report.problems}
-    assert by_target["jump dlc_only"].inherited and not by_target["jump dlc_only"].gates
-    assert not by_target["jump dropped"].inherited and by_target["jump dropped"].gates
+    # Witch dropped `dropped` and the image `lost`; the original never had
+    # `dlc_only` or an image tagged `rga`.
+    original = Source(frozenset({"start", "ending", "x", "y", "dropped"}), frozenset({"eileen", "lost"}))
+    report = verify(data, source=original)
+    by_subject = {p.message.split("`")[1]: p for p in report.problems}
+    for inherited in ("jump dlc_only", "show rga wat"):
+        assert by_subject[inherited].inherited and not by_subject[inherited].gates
+    for introduced in ("jump dropped", "show lost"):
+        assert not by_subject[introduced].inherited and by_subject[introduced].gates
     assert report.failed
     assert "in the original too" in report.to_markdown()
     assert not any(p.inherited for p in verify(data).problems)

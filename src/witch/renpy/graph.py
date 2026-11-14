@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from ..bundle.schema import NONE
 from ..bundle.writer import Writer
+from ..verify import Source
 
 # Parameter kinds in a harvested signature, numbered as Python's inspect does.
 POSITIONAL_ONLY, POSITIONAL_OR_KEYWORD, VAR_POSITIONAL, KEYWORD_ONLY, VAR_KEYWORD = range(5)
@@ -233,3 +234,8 @@ def build(harvest: dict, writer: Writer | None = None) -> Writer:
     writer = writer or Writer()
     _Graph(harvest, writer).build()
     return writer
+
+
+def source(harvest: dict) -> Source:
+    """What the game defines by its own Ren'Py's account, for the verifier."""
+    return Source(frozenset(harvest["labels"]), frozenset(name.split(" ")[0] for name in harvest["images"]))

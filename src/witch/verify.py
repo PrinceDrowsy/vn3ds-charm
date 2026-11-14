@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from collections import deque
+from dataclasses import dataclass
 
 from .bundle.reader import Bundle, FormatError, Node
 from .bundle.schema import NONE
@@ -14,9 +15,16 @@ ENTRY_LABELS = ("splashscreen", "before_main_menu", "main_menu", "start", "after
 _HAS_LABEL = re.compile(r"""\s*renpy\.has_label\(\s*(['"])([^'"]+)\1\s*\)\s*""")
 
 
-def verify(data: bytes, name: str = "", source_labels: set[str] | None = None) -> Report:
-    """`source_labels`, when the caller knows them, are the labels the
-    original game defines; a jump to a label it lacks too is inherited."""
+@dataclass(frozen=True)
+class Source:
+    """What the original game itself defines, as its own engine reported
+    it. A reference the original can't resolve either is inherited."""
+
+    labels: frozenset[str]
+    image_tags: frozenset[str]
+
+
+def verify(data: bytes, name: str = "", source: Source | None = None) -> Report:
     report = Report(name, [])
     try:
         bundle = Bundle(data)
@@ -26,7 +34,7 @@ def verify(data: bytes, name: str = "", source_labels: set[str] | None = None) -
         report.problems.append(Problem(e.code, "crash", "static", str(e),
                                        "The bundle is damaged or from another Witch version; reconvert it."))
         return report
-    _Checker(bundle, nodes, report.problems, source_labels).run()
+    _Checker(bundle, nodes, report.problems, source).run()
     return report
 
 
@@ -63,11 +71,11 @@ def _check_tables(bundle: Bundle, nodes: list[Node]) -> None:
 
 
 class _Checker:
-    def __init__(self, bundle: Bundle, nodes: list[Node], problems: list[Problem], source_labels: set[str] | None):
+    def __init__(self, bundle: Bundle, nodes: list[Node], problems: list[Problem], source: Source | None):
         self.bundle = bundle
         self.nodes = nodes
         self.problems = problems
-        self.source_labels = source_labels
+        self.source = source
         self.labels = dict(bundle.labels())
         # Ren'Py resolves `show tag attrs` by attribute matching, which arrives
         # with R4; until then a show only needs some image with its tag.
@@ -146,7 +154,7 @@ class _Checker:
         elif kind in ("jump", "call"):
             target = f["target"] if kind == "jump" else f["label"]
             if target not in self.labels:
-                inherited = self.source_labels is not None and target not in self.source_labels
+                inherited = self.source is not None and target not in self.source.labels
                 self._add("missing-label", "crash", reach, node, f"`{kind} {target}` targets a label that doesn't exist.",
                           "The original game lacks it too; often DLC that isn't installed." if inherited else "",
                           inherited)
@@ -157,8 +165,10 @@ class _Checker:
         elif kind in ("show", "scene") and f["name"] and f["expression"] == NONE:
             tag = f["name"][0]
             if tag not in self.tags:
+                inherited = self.source is not None and tag not in self.source.image_tags
                 self._add("missing-image", "missing", reach, node,
-                          f"`{kind} {' '.join(f['name'])}`: no image with the tag `{tag}` is defined.")
+                          f"`{kind} {' '.join(f['name'])}`: no image with the tag `{tag}` is defined.",
+                          "The original game doesn't define it either." if inherited else "", inherited)
 
     def _image_reach(self) -> dict[str, Reach]:
         """Each tag's best reach over the shows that use it. A reachable

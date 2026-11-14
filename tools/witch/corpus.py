@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from witch.bundle.reader import Bundle  # noqa: E402
-from witch.renpy.graph import build  # noqa: E402
+from witch.renpy.graph import build, source  # noqa: E402
 from witch.renpy.harvester import HarvestError, harvest  # noqa: E402
 from witch.verify import verify  # noqa: E402
 
@@ -40,7 +40,7 @@ def run(game: Path, scratch: Path) -> dict:
         traceback.print_exc()
         return {"game": game.name, "error": f"build: {type(e).__name__}: {e}"}
     (scratch / f"{game.name}.charm").write_bytes(data)
-    report = verify(data, game.name, set(h["labels"]))
+    report = verify(data, game.name, source(h))
     bundle = Bundle(data)
     unknown = Counter(n.fields["classname"] for n in map(bundle.node, range(bundle.count("NODE")))
                       if n.kind.name == "unknown")
@@ -51,23 +51,26 @@ def run(game: Path, scratch: Path) -> dict:
         "named": h["named_nodes"],
         "outside": h["named_outside_graph"],
         "unknown_classes": dict(unknown),
-        "summary": report.summary(),
+        # Reachable problems by severity, apart from those the original has too.
+        "reachable": dict(Counter(p.severity for p in report.problems if p.reach != "none" and not p.inherited)),
+        "inherited": sum(p.inherited for p in report.problems),
         "codes": dict(Counter(p.code for p in report.problems if p.gates)),
         "seconds": round(time.monotonic() - t0, 1),
     }
 
 
 def table(rows: list[dict]) -> str:
-    out = ["| Game | Ren'Py | Nodes | Named | Outside | Unmapped classes | Crash | Stuck | Missing | Mismatch | s |",
-           "|---|---|---|---|---|---|---|---|---|---|---|"]
+    out = ["| Game | Ren'Py | Nodes | Named | Outside | Unmapped classes | Crash | Stuck | Missing | Mismatch "
+           "| Inherited | s |",
+           "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         if "error" in r:
-            out.append(f"| {r['game']} | harvest failed: {r['error']} |" + " |" * 9)
+            out.append(f"| {r['game']} | harvest failed: {r['error']} |" + " |" * 10)
             continue
-        reach = lambda sev: sum(n for k, n in r["summary"][sev].items() if k != "none")  # noqa: E731
         unmapped = ", ".join(f"{k} {v}" for k, v in sorted(r["unknown_classes"].items())) or "-"
+        counts = " | ".join(str(r["reachable"].get(sev, 0)) for sev in ("crash", "stuck", "missing", "mismatch"))
         out.append(f"| {r['game']} | {r['renpy']} | {r['nodes']} | {r['named']} | {r['outside']} | {unmapped} | "
-                   f"{reach('crash')} | {reach('stuck')} | {reach('missing')} | {reach('mismatch')} | {r['seconds']} |")
+                   f"{counts} | {r['inherited']} | {r['seconds']} |")
     return "\n".join(out)
 
 

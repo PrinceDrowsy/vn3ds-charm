@@ -9,7 +9,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from .renpy.graph import build
+from .renpy.graph import build, source
 from .renpy.harvester import harvest
 from .report import Report
 from .verify import verify
@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     args.output.write_bytes(data)
     print(f"{h['renpy_version']}: {len(h['nodes'])} nodes harvested, Ren'Py names {h['named_nodes']}, "
           f"{h['named_outside_graph']} named outside the graph")
-    return _finish(verify(data, args.output.name, set(h["labels"])), args.output.name, args.report)
+    return _finish(verify(data, args.output.name, source(h)), args.output.name, args.report)
 
 
 if __name__ == "__main__":
