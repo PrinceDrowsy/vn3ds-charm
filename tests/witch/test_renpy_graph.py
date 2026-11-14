@@ -72,6 +72,12 @@ def harvest():
                         "store": "store"}, line=21),
         # 19
         node("Testcase2000", {}, line=22),
+        # 20: Ren'Py 8.2's combined translate + say, unlinked here
+        node("TranslateSay", {"identifier": "day1_start_c614cc05", "alternate": None, "language": "japanese",
+                              "after": {"node": None}, "who": "GR", "who_fast": True, "what": "愚かな人間よ",
+                              "with_": None, "interact": True, "attributes": None, "arguments": None,
+                              "temporary_attributes": None, "rollback": "normal", "explicit_identifier": False},
+             line=23),
     ]
     return {
         "renpy_version": "Ren'Py 7.0.0.196",
@@ -141,8 +147,18 @@ def test_if_python_user_statement_translate(bundle):
     assert python.flags == {"hide"} and bundle.code(python.fields["code"]) == ("x = 1", "hide")
     assert bundle.node(8).fields == {"name": "play music", "line": 'play music "a.ogg"'}
     translate = bundle.node(14)
-    assert translate.fields == {"identifier": "ending_0a1b", "language": "", "block": 15}
+    assert translate.fields == {"identifier": "ending_0a1b", "language": "", "alternate": "", "block": 15}
     assert bundle.node(16).kind.name == "end_translate"
+
+
+def test_translate_say_is_a_say_that_looks_up_its_translation(bundle):
+    line = bundle.node(20)
+    assert line.kind.name == "say" and line.flags == {"interact", "translate"}
+    f = line.fields
+    assert (f["identifier"], f["language"], f["alternate"], f["rollback"]) == \
+        ("day1_start_c614cc05", "japanese", "", "normal")
+    assert f["what"] == "愚かな人間よ"
+    assert bundle.node(1).fields["language"] == "" and "translate" not in bundle.node(1).flags
 
 
 def test_init_time_statements_and_unknown_classes(bundle):
@@ -167,7 +183,8 @@ def test_verifier_sees_the_graph_whole(bundle):
     ("C:\\Users\\dev\\vn/game/chance.rpy", "game/chance.rpy"),
     ("game/dialogue02.rpyc", "game/dialogue02.rpyc"),
     ("/home/tom/renpy/renpy/common/00start.rpy", "renpy/common/00start.rpy"),
-    ("odd.rpy", "odd.rpy"),
+    ("chapters/1_day.rpyc", "game/chapters/1_day.rpyc"),
+    ("/opt/odd.rpy", "odd.rpy"),
 ])
 def test_source_path(path, expected):
     assert source_path(path) == expected

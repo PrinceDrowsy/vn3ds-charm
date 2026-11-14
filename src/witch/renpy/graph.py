@@ -31,7 +31,12 @@ def _first(value):
 
 def source_path(path: str) -> str:
     """A Ren'Py file path relative to the game, without the developer's machine prefix."""
-    path = "/" + path.replace("\\", "/")  # paths may already start at game/
+    path = path.replace("\\", "/")
+    # Ren'Py 8 records paths relative to game/; older versions record where
+    # the developer's copy was, or a path starting at game/.
+    if not (path.startswith("/") or path[1:3] == ":/" or path.startswith(("game/", "renpy/"))):
+        return "game/" + path
+    path = "/" + path
     for marker in ("/game/", "/renpy/common/"):
         at = path.rfind(marker)
         if at >= 0:
@@ -114,8 +119,11 @@ class _Graph:
         atl = {"atl"} if f.get("atl") else set()
         if c == "Label":
             return "label", set(), {"name": n["name"], "parameters": self.parameters(f.get("parameters"))}
-        if c == "Say":
-            return "say", {"interact"} if f.get("interact", True) else set(), {
+        if c in ("Say", "TranslateSay"):
+            flags = {"interact"} if f.get("interact", True) else set()
+            if c == "TranslateSay":
+                flags.add("translate")
+            return "say", flags, {
                 "who": self.code(f.get("who")),
                 "what": f["what"],
                 "attributes": list(f.get("attributes") or []),
@@ -123,6 +131,9 @@ class _Graph:
                 "with": self.code(f.get("with_")),
                 "arguments": self.arguments(f.get("arguments")),
                 "identifier": f.get("identifier") or "",
+                "rollback": f.get("rollback") or "",
+                "language": f.get("language") or "",
+                "alternate": f.get("alternate") or "",
             }
         if c in ("Show", "Hide"):
             return c.lower(), atl, self.imspec(f["imspec"])
@@ -166,7 +177,7 @@ class _Graph:
             return "user_statement", set(), {"name": name, "line": f["line"]}
         if c == "Translate":
             return "translate", set(), {"identifier": f["identifier"], "language": f.get("language") or "",
-                                        "block": _first(f["block"])}
+                                        "alternate": f.get("alternate") or "", "block": _first(f["block"])}
         if c == "EndTranslate":
             return "end_translate", set(), {}
         if c in ("ShowLayer", "Camera"):

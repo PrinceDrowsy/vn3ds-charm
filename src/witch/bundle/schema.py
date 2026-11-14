@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-VERSION = (0, 2)
+VERSION = (0, 3)
 MAGIC = b"CHRM"
 NONE = 0xFFFFFFFF
 HEADER_SIZE = 16
@@ -136,8 +136,14 @@ NODE_KINDS = (
         ("temporary_attributes", List(STR)),
         ("with", CODE),
         ("arguments", CODE),
-        ("identifier", STR),
-    ]), flags=("interact",)),
+        ("identifier", STR),  # the translation id
+        ("rollback", STR),  # Ren'Py 8's per-line rollback mode; "" for the default
+        ("language", STR),  # "translate" only: the language this line is written in
+        ("alternate", STR),  # "translate" only: a fallback translation id
+    ]), flags=("interact",
+               # Ren'Py 8.2's TranslateSay: a line that first looks up its own
+               # translation, in place of a translate/say/end_translate triple.
+               "translate")),
     # "atl": the statement has an ATL block, which isn't carried yet (R4).
     Kind(3, "show", Struct("show", _IMSPEC), flags=("atl",)),
     Kind(4, "scene", Struct("scene", _IMSPEC), flags=("atl",)),
@@ -159,7 +165,8 @@ NODE_KINDS = (
     Kind(15, "python", Struct("python", [("code", CODE), ("store", STR)]), flags=("hide",)),
     Kind(16, "pass"),
     Kind(17, "user_statement", Struct("user_statement", [("name", STR), ("line", STR)])),
-    Kind(18, "translate", Struct("translate", [("identifier", STR), ("language", STR), ("block", NODE)])),
+    Kind(18, "translate", Struct("translate", [("identifier", STR), ("language", STR), ("alternate", STR),
+                                               ("block", NODE)])),
     Kind(19, "end_translate"),
     Kind(20, "show_layer", Struct("show_layer", [("layer", STR), ("at", List(CODE))]), flags=("atl",)),
     Kind(21, "camera", Struct("camera", [("layer", STR), ("at", List(CODE))]), flags=("atl",)),

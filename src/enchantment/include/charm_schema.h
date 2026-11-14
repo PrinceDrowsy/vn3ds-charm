@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 #define CHARM_VERSION_MAJOR 0
-#define CHARM_VERSION_MINOR 2
+#define CHARM_VERSION_MINOR 3
 #define CHARM_MAGIC 0x4d524843u
 #define CHARM_NONE 0xffffffffu
 #define CHARM_ALIGN 16
@@ -64,6 +64,7 @@ enum charm_node_kind {
 };
 #define CHARM_NODE_KIND_COUNT 34
 #define CHARM_SAY_INTERACT (1u << 0)
+#define CHARM_SAY_TRANSLATE (1u << 1)
 #define CHARM_SHOW_ATL (1u << 0)
 #define CHARM_SCENE_ATL (1u << 0)
 #define CHARM_PYTHON_HIDE (1u << 0)
@@ -174,6 +175,9 @@ typedef struct {
     uint32_t with; /* CODE */
     uint32_t arguments; /* CODE */
     uint32_t identifier; /* STRS */
+    uint32_t rollback; /* STRS */
+    uint32_t language; /* STRS */
+    uint32_t alternate; /* STRS */
 } charm_say;
 typedef struct {
     charm_list name; /* of STRS */
@@ -257,6 +261,7 @@ typedef struct {
 typedef struct {
     uint32_t identifier; /* STRS */
     uint32_t language; /* STRS */
+    uint32_t alternate; /* STRS */
     uint32_t block; /* NODE */
 } charm_translate;
 typedef struct {
@@ -375,7 +380,7 @@ _Static_assert(offsetof(charm_unknown, classname) == 0, "charm_unknown.classname
 _Static_assert(sizeof(charm_label) == 8, "charm_label size");
 _Static_assert(offsetof(charm_label, name) == 0, "charm_label.name");
 _Static_assert(offsetof(charm_label, parameters) == 4, "charm_label.parameters");
-_Static_assert(sizeof(charm_say) == 36, "charm_say size");
+_Static_assert(sizeof(charm_say) == 48, "charm_say size");
 _Static_assert(offsetof(charm_say, who) == 0, "charm_say.who");
 _Static_assert(offsetof(charm_say, what) == 4, "charm_say.what");
 _Static_assert(offsetof(charm_say, attributes) == 8, "charm_say.attributes");
@@ -383,6 +388,9 @@ _Static_assert(offsetof(charm_say, temporary_attributes) == 16, "charm_say.tempo
 _Static_assert(offsetof(charm_say, with) == 24, "charm_say.with");
 _Static_assert(offsetof(charm_say, arguments) == 28, "charm_say.arguments");
 _Static_assert(offsetof(charm_say, identifier) == 32, "charm_say.identifier");
+_Static_assert(offsetof(charm_say, rollback) == 36, "charm_say.rollback");
+_Static_assert(offsetof(charm_say, language) == 40, "charm_say.language");
+_Static_assert(offsetof(charm_say, alternate) == 44, "charm_say.alternate");
 _Static_assert(sizeof(charm_show) == 40, "charm_show size");
 _Static_assert(offsetof(charm_show, name) == 0, "charm_show.name");
 _Static_assert(offsetof(charm_show, expression) == 8, "charm_show.expression");
@@ -446,10 +454,11 @@ _Static_assert(offsetof(charm_python, store) == 4, "charm_python.store");
 _Static_assert(sizeof(charm_user_statement) == 8, "charm_user_statement size");
 _Static_assert(offsetof(charm_user_statement, name) == 0, "charm_user_statement.name");
 _Static_assert(offsetof(charm_user_statement, line) == 4, "charm_user_statement.line");
-_Static_assert(sizeof(charm_translate) == 12, "charm_translate size");
+_Static_assert(sizeof(charm_translate) == 16, "charm_translate size");
 _Static_assert(offsetof(charm_translate, identifier) == 0, "charm_translate.identifier");
 _Static_assert(offsetof(charm_translate, language) == 4, "charm_translate.language");
-_Static_assert(offsetof(charm_translate, block) == 8, "charm_translate.block");
+_Static_assert(offsetof(charm_translate, alternate) == 8, "charm_translate.alternate");
+_Static_assert(offsetof(charm_translate, block) == 12, "charm_translate.block");
 _Static_assert(sizeof(charm_show_layer) == 12, "charm_show_layer size");
 _Static_assert(offsetof(charm_show_layer, layer) == 0, "charm_show_layer.layer");
 _Static_assert(offsetof(charm_show_layer, at) == 4, "charm_show_layer.at");
