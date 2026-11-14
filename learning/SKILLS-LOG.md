@@ -83,7 +83,11 @@
   built-ins all work. Functions take no attributes of their own
   (`f.help = …`), which Ren'Py relies on: patched with a lazily created
   dict per function (`0002-function-attributes.patch`, checked with
-  MicroPython's own basics suite, 534 tests).
+  MicroPython's own basics suite, 534 tests). Tuples, strings and bytes
+  refused stepped slices (`args[0::2]`, `s[::-1]`; lists took them), and
+  built-in types had no `__new__` (`tuple.__new__(cls, x)`, which Ren'Py's
+  `Color` and 74 corpus call sites use): patches 0003 and 0004, each checked
+  against CPython's output and the basics suite.
 - **SKILL-015: Produce, check, fall back.** When part of an original
   engine has to be rewritten by hand (D27's description classes), have
   the rewrite produce the output, have the original engine produce the
@@ -96,6 +100,12 @@
   per-frame cost, how much the public API moves across versions, how many
   games subclass the API), not from taste; and the zones follow what
   Ren'Py itself compiled versus left in Python.
+- **SKILL-017: Emulate the original's phases, not just its order.** Ren'Py
+  creates every store and runs `python early` while it *loads* the
+  script, before init; running only the init order left `gui` undefined
+  for styles that name it. Harvest which statement classes have an
+  `early_execute` from the game's own Ren'Py instead of hard-coding them,
+  since the set changes between versions (8.3 added `transform`).
 - **SKILL-012: Spike on the real target early,** with go/no-go numbers set in
   advance, and keep the spike's code (`spikes/hardware/`) so the numbers can
   be reproduced.

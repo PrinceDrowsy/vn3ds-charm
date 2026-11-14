@@ -133,6 +133,16 @@ The first phases of `docs/REWORK-PLAN.md`: the bundle format and verifier
   step, and test a converter on behaviour (run the output), not only on
   whether it compiles.
 
+- **A comparison test that never reached the branch it should have
+  tested.** (R2.4) The `colorsys` stand-in matched CPython on 20,000
+  random cases, yet its `rgb_to_hls` used `2.0 - (maxc + minc)` where
+  CPython uses `2.0 - maxc - minc`, which rounds differently in about half
+  of the light colours. The random values rarely reached that branch. Found
+  by recalling CPython's own comment on it, then confirmed (154,935
+  differences in 300,000 light colours). *Prevention:* when comparing a
+  rewrite against the original, pick inputs that drive every branch, and
+  count how many cases each branch saw.
+
 ### What to do differently
 
 - Run the widest corpus as early as possible: the version differences
