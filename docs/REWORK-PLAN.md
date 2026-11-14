@@ -1148,22 +1148,25 @@ The old pipeline is frozen (D22).
         harvested from the game's Ren'Py), init code as a graph (labels,
         calls, ifs, loops), and `.rpym` modules at their
         `renpy.load_module` call.
-      - **R2.4c progress, 2026-11-14:** styles (a port of `style.pyx`'s
-        data side), `im.*` and `im.matrix`, `ImageReference`, `Solid`,
-        `Frame`, the box layouts, `ConditionSwitch`/`DynamicDisplayable`,
-        `ParameterizedText`, `renpy.Displayable`. Jisei: 3,803 steps run,
-        16 errors, 617 of 635 store names. Two more MicroPython patches
-        (stepped slices on tuples and strings; `__new__` on built-in
-        types). Next: `Character`, `Text`, transitions, `Transform`,
-        audio channels, the `renpy.ui` widgets, then the standard
-        modules still missing (`tarfile`, `pygame_sdl2`, `pyobjus`).
-        Style property *reads* are reported and give None until
-        resolution lands with R2.4d.
-      - **R2.4c Description classes** for what Jisei's init builds:
-        images and `im.*`, `Frame`, `Solid`, `Null`, the box layouts
-        `renpy.ui` uses, `Transform` and ATL transforms, the transition
-        families of `00definitions.rpy`, `Character`, styles, audio
-        channels. Their kinds are added to `schema.py` as each is written.
+      - **R2.4c progress, 2026-11-14:** Jisei's init runs every
+        statement (3,819) with no error, and every name in Ren'Py's own
+        store exists in ours, in every store, except one that only
+        exists with Steam present on the PC. Descriptions so far: styles
+        (a port of `style.pyx`'s data side), `im.*` and `im.matrix`,
+        `ImageReference`, `Solid`, `Frame`, the box layouts,
+        `ConditionSwitch`/`DynamicDisplayable`, `ParameterizedText`,
+        `renpy.Displayable`, `Character`, audio channels, the ATL property
+        table. Five MicroPython patches in all (`dict` from a mapping
+        subclass; function attributes; stepped slices; `__new__` on
+        built-in types; subclasses as right-hand operands, without which
+        `[1] == RevertableList([1])` was False). The converter now leaks
+        list-comprehension variables as Python 2 does. Standard modules
+        with no place on the device (the updater's `tarfile`, `zlib`,
+        `urllib`…) are reporting placeholders. Still to do: 243
+        placeholders are touched, mostly names `defaultstore` binds
+        (`Text`, `Transform`, the transitions, `renpy.ui` widgets) that
+        need descriptions before anything calls them; style property
+        reads give None until R2.4d.
       - **R2.4d The check.** The harvester lowers the oracle's registries
         and the descriptions in its store to the same records, reading the
         style property tables from the game's own Ren'Py.

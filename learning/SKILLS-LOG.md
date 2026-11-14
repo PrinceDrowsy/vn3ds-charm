@@ -87,7 +87,12 @@
   refused stepped slices (`args[0::2]`, `s[::-1]`; lists took them), and
   built-in types had no `__new__` (`tuple.__new__(cls, x)`, which Ren'Py's
   `Color` and 74 corpus call sites use): patches 0003 and 0004, each checked
-  against CPython's output and the basics suite.
+  against CPython's output and the basics suite. Native list, dict and
+  set operations refused instances of their subclasses on the right
+  (`[1] == RevertableList([1])` was False; `list + RevertableList`
+  raised): patch 0005. Patches must apply in order on a clean checkout;
+  rebuild each later patch against the earlier ones (`git diff --no-index`
+  from a patched copy) and check the result matches the working tree.
 - **SKILL-015: Produce, check, fall back.** When part of an original
   engine has to be rewritten by hand (D27's description classes), have
   the rewrite produce the output, have the original engine produce the
@@ -106,6 +111,11 @@
   for styles that name it. Harvest which statement classes have an
   `early_execute` from the game's own Ren'Py instead of hard-coding them,
   since the set changes between versions (8.3 added `transform`).
+- **SKILL-018: Python 2 list comprehensions leak their variables;
+  Python 3 can emulate it.** Run each loop under a private name and bind
+  the real one with `:=` as the comprehension's first condition (`:=`
+  binds in the enclosing scope). Not allowed in a class body or on a name
+  an enclosing comprehension iterates; leave those unleaked.
 - **SKILL-012: Spike on the real target early,** with go/no-go numbers set in
   advance, and keep the spike's code (`spikes/hardware/`) so the numbers can
   be reproduced.
