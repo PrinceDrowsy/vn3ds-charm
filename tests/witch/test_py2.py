@@ -167,3 +167,21 @@ def test_function_attributes_take_their_python_3_names():
     im_self = {"_": "Attribute", "value": name("m"), "attr": "im_self", "ctx": L}
     assert to_source(func_name, "eval") == "f.__name__"
     assert to_source(im_self, "eval") == "m.__self__"
+
+
+def test_list_comprehension_variables_leak_as_in_python_2():
+    comp = {"_": "ListComp", "elt": name("i"), "generators": [{"target": name("i", S), "iter": name("s"), "ifs": []}]}
+    assert to_source(comp, "eval") == "[i for __py2_i__ in s if [(i := __py2_i__)]]"
+    namespace = {"s": [1, 2, 3]}
+    exec(to_source([{"_": "Assign", "targets": [name("r", S)], "value": comp}], "exec"), namespace)
+    assert namespace["r"] == [1, 2, 3] and namespace["i"] == 3
+
+
+def test_list_comprehension_variables_stay_put_where_python_3_cannot_leak_them():
+    comp = {"_": "ListComp", "elt": name("i"), "generators": [{"target": name("i", S), "iter": name("s"), "ifs": []}]}
+    in_class = [{"_": "ClassDef", "name": "C", "bases": [], "body": [{"_": "Expr", "value": comp}],
+                 "decorator_list": []}]
+    in_generator = {"_": "GeneratorExp", "elt": comp,
+                    "generators": [{"target": name("i", S), "iter": name("t"), "ifs": []}]}
+    assert to_source(in_class, "exec") == "class C:\n    [i for i in s]"
+    assert to_source(in_generator, "eval") == "([i for i in s] for i in t)"

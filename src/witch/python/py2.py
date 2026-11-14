@@ -72,6 +72,27 @@ def to_source(tree, mode: str) -> str:
     return ast.unparse(ast.fix_missing_locations(module))
 
 
+def _target_names(target: ast.expr) -> list[str]:
+    if isinstance(target, ast.Name):
+        return [target.id]
+    if isinstance(target, (ast.Tuple, ast.List)):
+        return [name for elt in target.elts for name in _target_names(elt)]
+    return []
+
+
+def _plain_target(target: ast.expr) -> bool:
+    """Only names, perhaps nested in tuples (no attributes or items)."""
+    if isinstance(target, ast.Name):
+        return True
+    return isinstance(target, (ast.Tuple, ast.List)) and all(_plain_target(e) for e in target.elts)
+
+
+def _rename_target(target: ast.expr) -> ast.expr:
+    if isinstance(target, ast.Name):
+        return ast.Name(id=f"__py2_{target.id}__", ctx=ast.Store())
+    return type(target)(elts=[_rename_target(e) for e in target.elts], ctx=ast.Store())
+
+
 def _name(id_: str) -> ast.Name:
     return ast.Name(id=id_, ctx=ast.Load())
 
@@ -105,6 +126,10 @@ class _Converter:
     def __init__(self, tree, mode: str):
         self.true_division = mode != "eval" and _imports_division(tree)
         self.temps = 0
+        # Enclosing scopes, innermost last: "class" for a class body, or the
+        # iteration names of a Python 3-scoped comprehension (generator,
+        # set and dict comprehensions keep their own scope in Python 2 too).
+        self.scopes = []
 
     def temp(self) -> str:
         self.temps += 1
@@ -143,11 +168,17 @@ class _Converter:
 
     def stmt_FunctionDef(self, n):
         args, unpack = self.arguments(n["args"])
-        return ast.FunctionDef(name=n["name"], args=args, body=unpack + self.block(n["body"]),
+        self.scopes.append("function")
+        body = unpack + self.block(n["body"])
+        self.scopes.pop()
+        return ast.FunctionDef(name=n["name"], args=args, body=body,
                                decorator_list=self.exprs(n["decorator_list"]), returns=None, type_params=[])
 
     def stmt_ClassDef(self, n):
-        return ast.ClassDef(name=n["name"], bases=self.exprs(n["bases"]), keywords=[], body=self.block(n["body"]),
+        self.scopes.append("class")
+        body = self.block(n["body"])
+        self.scopes.pop()
+        return ast.ClassDef(name=n["name"], bases=self.exprs(n["bases"]), keywords=[], body=body,
                             decorator_list=self.exprs(n.get("decorator_list")), type_params=[])
 
     def stmt_Return(self, n):
@@ -326,17 +357,42 @@ class _Converter:
                                   is_async=0) for g in gens]
 
     def expr_ListComp(self, n):
-        return ast.ListComp(elt=self.expr(n["elt"]), generators=self.comprehensions(n["generators"]))
+        """Python 2's list comprehensions run in the enclosing scope, so
+        their loop variables are left set afterwards, and code relies on it.
+        Each loop runs under a private name and assigns the real one with :=
+        (which binds in the enclosing scope) before anything else uses it.
+        Not possible in a class body or for a name an enclosing comprehension
+        iterates over, where Python 3 forbids :=; those stay unleaked."""
+        generators = self.comprehensions(n["generators"])
+        names = [name for g in generators for name in _target_names(g.target)]
+        blocked = set(name for scope in self.scopes if isinstance(scope, set) for name in scope)
+        if (not names or (self.scopes and self.scopes[-1] == "class") or blocked & set(names)
+                or any(not _plain_target(g.target) for g in generators)):
+            return ast.ListComp(elt=self.expr(n["elt"]), generators=generators)
+        for g in generators:
+            leaked = _target_names(g.target)
+            g.target = _rename_target(g.target)
+            g.ifs.insert(0, ast.List(elts=[ast.NamedExpr(target=ast.Name(id=name, ctx=ast.Store()),
+                                                         value=_name(f"__py2_{name}__")) for name in leaked],
+                                     ctx=ast.Load()))
+        return ast.ListComp(elt=self.expr(n["elt"]), generators=generators)
+
+    def scoped_comprehension(self, n, build):
+        generators = self.comprehensions(n["generators"])
+        self.scopes.append(set(name for g in generators for name in _target_names(g.target)))
+        result = build(generators)
+        self.scopes.pop()
+        return result
 
     def expr_SetComp(self, n):
-        return ast.SetComp(elt=self.expr(n["elt"]), generators=self.comprehensions(n["generators"]))
+        return self.scoped_comprehension(n, lambda gens: ast.SetComp(elt=self.expr(n["elt"]), generators=gens))
 
     def expr_DictComp(self, n):
-        return ast.DictComp(key=self.expr(n["key"]), value=self.expr(n["value"]),
-                            generators=self.comprehensions(n["generators"]))
+        return self.scoped_comprehension(n, lambda gens: ast.DictComp(key=self.expr(n["key"]),
+                                                                      value=self.expr(n["value"]), generators=gens))
 
     def expr_GeneratorExp(self, n):
-        return ast.GeneratorExp(elt=self.expr(n["elt"]), generators=self.comprehensions(n["generators"]))
+        return self.scoped_comprehension(n, lambda gens: ast.GeneratorExp(elt=self.expr(n["elt"]), generators=gens))
 
     def expr_Yield(self, n):
         return ast.Yield(value=self.expr(n["value"]))
