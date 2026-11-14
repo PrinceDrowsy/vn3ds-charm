@@ -58,7 +58,11 @@ def _step(harvest: dict, index: int) -> dict:
     elif n["class"] == "Transform":
         step.update(store=f.get("store") or "store", varname=f["varname"], parameters=f.get("parameters"))
     elif n["class"] == "Style":
-        step.update(name=f.get("style_name"), parent=f.get("parent"))
+        properties = (f.get("properties") or {}).get("dict", [])
+        step.update(name=f["style_name"], parent=f.get("parent"), clear=bool(f.get("clear")), take=f.get("take"),
+                    delattr=f.get("delattr") or [],
+                    properties=[[name, _source(harvest, ref, "eval")] for name, ref in properties],
+                    variant=_source(harvest, f.get("variant"), "eval"))
     elif n["class"] == "Screen":
         step["name"] = (f.get("screen") or {}).get("name")
     elif n["class"] == "TranslateString":
@@ -78,9 +82,30 @@ def _is_harvester(n: dict) -> bool:
     return "zzz_witch_harvest" in n["file"]
 
 
+def _early(harvest: dict) -> list[dict]:
+    """What Ren'Py does as it loads each file, before init: every statement
+    class with an early_execute creates its store, `python early` runs, and
+    a `define` of an early config variable sets it."""
+    early = harvest["early"]
+    steps = []
+    for i, n in enumerate(harvest["nodes"]):
+        if n["class"] not in early["classes"] or _is_harvester(n):
+            continue
+        f = n["fields"]
+        if n["class"] == "EarlyPython":
+            steps.append(_step(harvest, i))
+            continue
+        steps.append({"node": i, "class": "CreateStore", "file": n["file"], "line": n["line"],
+                      "store": f.get("store") or "store"})
+        if (n["class"] == "Define" and f.get("store") == "store.config" and f["varname"] in early["config"]
+                and (f.get("operator") or "=") == "=" and f.get("index") is None):
+            steps.append(dict(_step(harvest, i), **{"class": "EarlyConfig"}))
+    return steps
+
+
 def program(harvest: dict) -> dict:
     nodes = harvest["nodes"]
-    early = [_step(harvest, i) for i, n in enumerate(nodes) if n["class"] == "EarlyPython" and not _is_harvester(n)]
+    early = _early(harvest)
     init = []
     for priority, start in harvest["initcode"]:
         if start is None or _is_harvester(nodes[start]):
@@ -106,4 +131,5 @@ def program(harvest: dict) -> dict:
             continue
         modules.append([name, {"statements": _statements(source)}])
     return {"py2": harvest["python"]["version"][0] == 2, "renpy_version": harvest["renpy_version"],
-            "renpy_modules": harvest["renpy_modules"], "modules": modules, "early": early, "init": init}
+            "renpy_modules": harvest["renpy_modules"], "style_tables": harvest.get("style_tables"),
+            "modules": modules, "early": early, "init": init}

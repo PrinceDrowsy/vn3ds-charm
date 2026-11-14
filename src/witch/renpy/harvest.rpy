@@ -265,15 +265,18 @@ init 999999 python:
         renpy_modules = sorted(name for name, m in sys.modules.items()
                                if m is not None and (name == "renpy" or name.startswith("renpy.")))
 
-        # Ren'Py's own pure-Python modules that the shim runs as they are,
-        # in the order they're loaded: config defaults, the base object,
-        # curry, preferences and persistent data, the names every store starts
-        # with (minstore) and the main store's (defaultstore). As source on
+        # Ren'Py's own pure-Python modules that the shim runs as they are
+        # (REWORK-PLAN §6.3's logic zone), in the order Ren'Py imports them:
+        # config defaults, the base object, preferences, curry, colours, the
+        # displayable coercions, persistent data, the user-statement
+        # registry, the ui builders, the names every store starts with
+        # (minstore) and the main store's (defaultstore). As source on
         # Python 3, as a tree on Python 2. A list, not a dict: Python 2's
         # dicts have no order, and the load order matters.
         modules = []
         renpy_dir = os.path.dirname(renpy.__file__)
-        for module in ("config", "object", "curry", "preferences", "persistent", "ui", "minstore", "defaultstore"):
+        for module in ("config", "object", "preferences", "curry", "color", "easy", "persistent", "statements", "ui",
+                       "minstore", "defaultstore"):
             module_path = os.path.join(renpy_dir, module + ".py")
             if not os.path.exists(module_path):
                 modules.append(["renpy." + module, {"error": "the game ships no source for it"}])
@@ -386,8 +389,32 @@ init 999999 python:
                 python["old_flags"] = future_names(old_flags)
             file_flags = getattr(renpy.python, "file_compiler_flags", {})
             python["file_flags"] = dict((k, future_names(v)) for k, v in file_flags.items() if v)
-            f.write('"python": %s,\n"initcode": %s,\n"modules": %s,\n"renpy_modules": %s,\n"config": '
-                    % (json.dumps(python), json.dumps(initcode), json.dumps(modules), json.dumps(renpy_modules)))
+            # The style property tables, which Ren'Py generates and compiles
+            # in: which properties exist, what each sets, and the prefixes'
+            # priorities (REWORK-PLAN §6.3). Ren'Py before 6.18 has none.
+            try:
+                import renpy.styledata.stylesets as stylesets
+                style_tables = {
+                    "all_properties": builtins.dict((k, builtins.list(v)) for k, v in stylesets.all_properties.items()),
+                    "prefix_priority": builtins.dict(stylesets.prefix_priority),
+                    "prefix_alts": builtins.dict((k, builtins.list(v)) for k, v in stylesets.prefix_alts.items()),
+                    "property_priority": builtins.dict(stylesets.property_priority),
+                }
+            except ImportError:
+                style_tables = None
+            # What Ren'Py does while loading the script, before init: which
+            # statements have an early_execute (each creates its store), and
+            # the config variables a `define` sets then too.
+            early = {
+                "classes": sorted(name for name, cls in vars(renpy.ast).items()
+                                  if isinstance(cls, type) and issubclass(cls, renpy.ast.Node)
+                                  and getattr(cls, "early_execute", None) is not None),
+                "config": sorted(getattr(renpy.ast, "EARLY_CONFIG", ())),
+            }
+            f.write('"python": %s,\n"initcode": %s,\n"modules": %s,\n"renpy_modules": %s,\n"style_tables": %s,\n'
+                    '"early": %s,\n"config": ' % (json.dumps(python), json.dumps(initcode), json.dumps(modules),
+                                                  json.dumps(renpy_modules), json.dumps(style_tables),
+                                                  json.dumps(early)))
             json.dump(dict((k, val(v)) for k, v in sorted(vars(renpy.config).items()) if own(k)), f)
             f.write(',\n"store": {')
             for i, (store_name, store) in enumerate(sorted(renpy.python.store_dicts.items())):
