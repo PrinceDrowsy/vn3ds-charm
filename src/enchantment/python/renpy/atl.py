@@ -32,6 +32,16 @@ _TYPES = {"position": position, "any_object": any_object, "bool_or_none": bool_o
 PROPERTIES = {}
 
 
+class Context(object):
+    """The names an ATL transform's expressions see beyond the store."""
+
+    def __init__(self, context):
+        self.context = context
+
+    def eval(self, expr):
+        return eval(expr, renpy.store.__dict__, self.context)
+
+
 def load_properties(table):
     """Installs the harvested property table (name -> type name, or a list
     of them for a tuple property)."""
