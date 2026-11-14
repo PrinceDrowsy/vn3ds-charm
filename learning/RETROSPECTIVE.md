@@ -152,6 +152,18 @@ The first phases of `docs/REWORK-PLAN.md`: the bundle format and verifier
   (Ren'Py's `main.py`, `script.finish_load`, `exports.load_module`) end to
   end, not just the statements it runs.
 
+- **An oracle read at the wrong moment.** (R2.4d) The first style
+  comparison disagreed both ways: Ren'Py's own values for `_default` were
+  older than its own definitions said. Ren'Py caches a style's values when
+  first built and only rebuilds every style after init, so reading them
+  during init (where the harvester runs) gave stale values. The other half
+  of the disagreement was ours: Ren'Py's later launches apply the previous
+  init's screen size before init, which the scratch copy's persistent data
+  had and our run didn't. *Prevention:* when the original and the rewrite
+  disagree in both directions, check when and in what state the original
+  was read before changing the rewrite; and emulate a later launch, not a
+  first one, since that's what a player sees.
+
 ### What to do differently
 
 - Run the widest corpus as early as possible: the version differences

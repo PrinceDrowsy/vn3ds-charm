@@ -128,6 +128,12 @@
   `random` had only getrandbits and seed, and lower()/upper() change ASCII
   letters only. Measure a game's needs (corpus counts of each method and
   module) before deciding between a C patch and a Python stand-in.
+- **SKILL-021: Read compiled behaviour by probing it.** Ren'Py's style
+  property code is generated and compiled; nothing ships that says what
+  `area` or `xalign` sets. Setting each property on a fresh style with
+  sentinel values (a float, a tuple of distinct values, None, "left", a
+  colour, a file name, True) and reading back every affected property
+  recovers the rules exactly: element sources, constants, conversions.
 - **SKILL-012: Spike on the real target early,** with go/no-go numbers set in
   advance, and keep the spike's code (`spikes/hardware/`) so the numbers can
   be reproduced.

@@ -1171,6 +1171,20 @@ The old pipeline is frozen (D22).
         `renpy.ast`, testcases, the updater's threads). Not yet handled:
         Unicode case mapping (`"é".upper()`), which MicroPython limits to
         ASCII.
+      - **R2.4d progress, 2026-11-14: styles.** The harvester probes
+        each style property in the game's own Ren'Py with a few kinds of
+        value and records what each affected property reads back; Witch
+        derives every property's rule from that (`witch/renpy/styles.py`:
+        which properties it sets, from which part of the value, through
+        which of Ren'Py's conversions). The shim resolves styles with
+        those rules and Ren'Py's priorities. Jisei: all 71,031 resolved
+        values (215 styles, five widget states) match Ren'Py's. Two things
+        the comparison taught: Ren'Py keeps a style's values from its first
+        build until it rebuilds every style after init, so the oracle is
+        read after a rebuild; and Ren'Py applies the screen size the last
+        init ended with before init on every later launch, so init here
+        does too. The comparison still lives in a scratch script; it moves
+        into Witch with R2.5's comparison.
       - **R2.4d The check.** The harvester lowers the oracle's registries
         and the descriptions in its store to the same records, reading the
         style property tables from the game's own Ren'Py.
