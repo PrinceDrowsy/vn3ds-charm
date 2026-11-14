@@ -163,3 +163,19 @@ def _section_offset(data, tag):
         if t == schema.tag_value(tag):
             return off
     raise KeyError(tag)
+
+
+def test_a_call_guarded_by_has_label_of_a_missing_label_is_dead():
+    # Ren'Py's own _hide_windows calls an optional hook this way.
+    w = _game()
+    hook = w.node("label", {"name": "_hide_windows"})
+    call = w.node("call", {"label": "hide_windows"})
+    guard = w.node("if", {"entries": [{"condition": w.code('renpy.has_label("hide_windows")'), "block": call}]})
+    other = w.node("call", {"label": "nowhere"})
+    unguarded = w.node("if", {"entries": [{"condition": w.code('renpy.has_label("hide_windows") or x'),
+                                           "block": other}]})
+    w.link(hook, guard, unguarded)
+    w.label("_hide_windows", hook)
+    report = verify(w.write())
+    reaches = {p.message.split("`")[1]: p.reach for p in report.problems}
+    assert reaches == {"call hide_windows": "none", "call nowhere": "dynamic"}

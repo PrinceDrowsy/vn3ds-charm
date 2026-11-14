@@ -1,6 +1,7 @@
 """The bundle verifier (REWORK-PLAN §13.1): structure first, then meaning."""
 from __future__ import annotations
 
+import re
 from collections import deque
 
 from .bundle.reader import Bundle, FormatError, Node
@@ -9,6 +10,8 @@ from .report import Problem, Reach, Report
 
 # Labels Ren'Py itself enters, in addition to `start`.
 ENTRY_LABELS = ("splashscreen", "before_main_menu", "main_menu", "start", "after_load", "after_warp", "quit")
+
+_HAS_LABEL = re.compile(r"""\s*renpy\.has_label\(\s*(['"])([^'"]+)\1\s*\)\s*""")
 
 
 def verify(data: bytes, name: str = "") -> Report:
@@ -92,12 +95,21 @@ class _Checker:
         elif kind == "menu":
             out += [item["block"] for item in f["items"]]
         elif kind == "if":
-            out += [entry["block"] for entry in f["entries"]]
+            out += [entry["block"] for entry in f["entries"] if not self._dead_guard(entry["condition"])]
         elif kind in ("while", "translate"):
             out.append(f["block"])
         if kind not in ("jump", "jump_expression", "return"):
             out.append(node.next)
         return [i for i in out if i != NONE]
+
+    def _dead_guard(self, condition: int) -> bool:
+        """`renpy.has_label("x")` for a label the game doesn't have. Labels
+        are fixed once the script loads, so that branch never runs; Ren'Py's
+        own optional hooks (`hide_windows`) are written this way."""
+        if condition == NONE:
+            return False
+        m = _HAS_LABEL.fullmatch(self.bundle.code(condition)[0])
+        return m is not None and m.group(2) not in self.labels
 
     def _walk(self, roots: list[int], seen: set[int]) -> set[int]:
         found = set()
