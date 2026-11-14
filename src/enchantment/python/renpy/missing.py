@@ -48,8 +48,8 @@ class MissingModule:
     or placeholders."""
 
     def __init__(self, name):
+        # Registering one isn't a use; what's taken from it is recorded.
         self._name = name
-        record(name)
 
     def __getattr__(self, attr):
         if attr.startswith("__"):

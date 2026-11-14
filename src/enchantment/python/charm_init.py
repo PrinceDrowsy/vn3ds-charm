@@ -191,13 +191,14 @@ def qualified(obj):
     return "%s.%s" % (getattr(obj, "__module__", None) or "?", getattr(obj, "__name__", "?"))
 
 
-def stand_in_modules(names):
-    """Registers a placeholder for each of the game's Ren'Py modules the shim
-    doesn't implement, so importing it works. The shim's own modules aren't
+def stand_in_modules(names, loaded):
+    """Registers a placeholder for each of the game's Ren'Py modules that
+    neither the shim implements nor the program loads from the game's
+    source (`loaded`), so importing it works. The shim's own modules aren't
     imported here: they build on Ren'Py's own (renpy.object), which load
     after this."""
     for name in names:
-        if name in sys.modules or shim_has(name):
+        if name in sys.modules or name in loaded or shim_has(name):
             continue
         module = sys.modules[name] = missing.MissingModule(name)
         parent, _, child = name.rpartition(".")
@@ -311,7 +312,8 @@ def main(program_path, result_path):
     _charm.common_files = program["common_files"]
     if program["style_tables"] is not None:
         stylesets.load(program["style_tables"])
-    attempt(("renpy modules", 0), stand_in_modules, program["renpy_modules"])
+    attempt(("renpy modules", 0), stand_in_modules, program["renpy_modules"],
+            set(name for name, _ in program["modules"]))
     for name, entry in program["modules"]:  # in the harvest's load order
         attempt((name, 0), load_module, name, entry, attempt)
     attempt(("post_import", 0), post_import)
