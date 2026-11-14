@@ -1,5 +1,9 @@
 """Builds the phase H spike for the desktop and the 3DS.
 
+`--nanbox` builds the NaN-boxing variant (MICROPY_OBJ_REPR_D, floats unboxed)
+into build/nanbox, for the 3DS only: it needs 32-bit pointers, and native
+code doesn't work with it.
+
 Needs MICROPYTHON_DIR pointing at a MicroPython checkout with mpy-cross built,
 MSYS2 (MSYS2_ROOT, default C:/msys64) for the embed package's make step, and
 devkitPro (DEVKITPRO_ROOT, default C:/devkitPro). Temp files follow TMP.
@@ -13,8 +17,10 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-BUILD = HERE / "build"
+NANBOX = "--nanbox" in sys.argv[1:]
+BUILD = HERE / "build" / ("nanbox" if NANBOX else "default")
 EMBED = BUILD / "micropython_embed"
+GENERATED = BUILD / "embed-gen"  # on the include path of both the embed step and the compile
 
 MICROPYTHON = Path(os.environ["MICROPYTHON_DIR"])
 MSYS2 = Path(os.environ.get("MSYS2_ROOT", "C:/msys64"))
@@ -24,7 +30,7 @@ ARM_GCC = DEVKITPRO / "devkitARM" / "bin" / "arm-none-eabi-gcc.exe"
 ARM_FLAGS = ["-march=armv6k", "-mtune=mpcore", "-mfloat-abi=hard", "-mtp=soft", "-D__3DS__",
              "-I", str(DEVKITPRO / "libctru" / "include")]
 COMMON_FLAGS = ["-std=gnu11", "-O2", "-DNDEBUG", "-Wall", "-ffunction-sections", "-fdata-sections",
-                "-I", str(EMBED), "-I", str(HERE), "-I", str(BUILD)]
+                "-I", str(EMBED), "-I", str(HERE), "-I", str(BUILD), "-I", str(GENERATED)]
 
 
 def posix(path: Path) -> str:
@@ -46,9 +52,11 @@ def run(cmd: list, **kw) -> None:
 
 
 def embed_package() -> None:
+    GENERATED.mkdir(parents=True, exist_ok=True)
+    (GENERATED / "charm_variant.h").write_text(f"#define CHARM_NANBOX {int(NANBOX)}\n")
     script = (f"cd '{posix(HERE)}' && make -f micropython_embed.mk "
               f"MICROPYTHON_TOP='{posix(MICROPYTHON)}' USER_C_MODULES='{posix(HERE / 'charm_module')}' "
-              f"BUILD='{posix(BUILD / 'embed-gen')}' PACKAGE_DIR='{posix(EMBED)}' PYTHON=python")
+              f"BUILD='{posix(GENERATED)}' PACKAGE_DIR='{posix(EMBED)}' PYTHON=python")
     run([MSYS2 / "usr" / "bin" / "bash.exe", "-c", script], env=msys_env())
 
 
@@ -62,6 +70,8 @@ MPY_BLOBS = (
 def mpy_header() -> None:
     out = []
     for name, src, flags in MPY_BLOBS:
+        if NANBOX and "emit=native" in flags:
+            continue
         mpy = BUILD / f"{name}.mpy"
         run([MICROPYTHON / "mpy-cross" / "build" / "mpy-cross.exe", *flags, "-o", mpy, HERE / src])
         data = mpy.read_bytes()
@@ -71,8 +81,9 @@ def mpy_header() -> None:
 
 
 def sources() -> list[Path]:
-    srcs = [p for p in EMBED.rglob("*.c") if p.name != "mphalport.c"]  # runner.c supplies stdout
-    return srcs + [HERE / "charm_module" / "modcharm.c", HERE / "runner.c"]
+    # runner.c supplies stdout, embed.c the init/exec glue.
+    srcs = [p for p in EMBED.rglob("*.c") if p.name not in ("mphalport.c", "embed_util.c")]
+    return srcs + [HERE / "charm_module" / "modcharm.c", HERE / "embed.c", HERE / "runner.c"]
 
 
 def compile_all(cc: Path, flags: list, out_dir: Path, env: dict) -> list[Path]:
@@ -112,10 +123,11 @@ def nintendo_3ds() -> Path:
 
 
 def main() -> None:
-    BUILD.mkdir(exist_ok=True)
+    BUILD.mkdir(parents=True, exist_ok=True)
     embed_package()
     mpy_header()
-    print("desktop:", desktop())
+    if not NANBOX:
+        print("desktop:", desktop())
     print("3ds:", nintendo_3ds())
 
 

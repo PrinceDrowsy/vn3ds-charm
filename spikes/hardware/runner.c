@@ -136,6 +136,7 @@ static void memory_report(void) {
 #endif
 }
 
+#if MICROPY_EMIT_ARM
 #ifdef __3DS__
 #define PAGE 0x1000
 static Handle process;
@@ -167,6 +168,7 @@ void *charm_commit_exec(void *fun_data, size_t len, void *reloc) {
 #endif
     return fun_data;
 }
+#endif
 
 static void run_python(int heap_mb, const char *prelude, const uint8_t *mpy, size_t mpy_len) {
     size_t heap_size = (size_t)heap_mb * 1024 * 1024;
@@ -194,8 +196,8 @@ int main(void) {
     start_us = 0;
     start_us = platform_ticks_us();
     results = fopen(RESULTS_PATH, "w");
-    out("VN3DS-CHARM phase H spike, MicroPython %d.%d.%d\n", MICROPY_VERSION_MAJOR, MICROPY_VERSION_MINOR,
-        MICROPY_VERSION_MICRO);
+    out("VN3DS-CHARM phase H spike, MicroPython %d.%d.%d%s\n", MICROPY_VERSION_MAJOR, MICROPY_VERSION_MINOR,
+        MICROPY_VERSION_MICRO, CHARM_NANBOX ? ", nanbox" : "");
     memory_report();
     run_python(16, "MODE = 'full'", bench_mpy, sizeof bench_mpy);
     sd_benchmark();
@@ -204,20 +206,25 @@ int main(void) {
     run_python(4, "NATIVE = False", frames_bc_mpy, sizeof frames_bc_mpy);
     out("done; saved to %s\n", RESULTS_PATH);
 #ifdef __3DS__
+#if MICROPY_EMIT_ARM
     // Native code is opt-in and last: if the kernel won't make memory
     // executable for this process, the console can freeze.
-    printf("A: try native code (may freeze;\n   hold POWER to recover)\nSTART: exit\n");
+    printf("A: try native code (may freeze;\n   hold POWER to recover)\n");
+#endif
+    printf("START: exit\n");
     while (aptMainLoop()) {
         hidScanInput();
         u32 keys = hidKeysDown();
         if (keys & KEY_START)
             break;
+#if MICROPY_EMIT_ARM
         if (keys & KEY_A) {
             svcDuplicateHandle(&process, CUR_PROCESS_HANDLE);
             run_python(4, "NATIVE = True", frames_native_mpy, sizeof frames_native_mpy);
             out("native done\n");
             printf("START: exit\n");
         }
+#endif
         gspWaitForVBlank();
     }
 #endif

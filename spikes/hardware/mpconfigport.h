@@ -28,6 +28,13 @@
 #define MICROPY_PY_IO                           (0)
 #define MICROPY_PY_UCTYPES                      (0)
 
+#include "charm_variant.h"  // written by build.py
+
+#if CHARM_NANBOX
+// NaN-boxing: doubles live inside the 64-bit object word, so float math
+// doesn't allocate. MicroPython's native emitters don't support it.
+#define MICROPY_OBJ_REPR                        (MICROPY_OBJ_REPR_D)
+#else
 // Native ARM code from `mpy-cross -march=armv6 -X emit=native`. The GC heap
 // isn't executable on the 3DS, so the runner places native code on its own
 // pages and marks them executable when MicroPython commits them.
@@ -43,3 +50,4 @@ void *charm_commit_exec(void *fun_data, size_t len, void *reloc);
 // are privileged and fault in a 3DS app. charm_commit_exec has already
 // flushed through the kernel by the time this would run.
 #define MP_HAL_CLEAN_DCACHE(addr, size)         ((void)(addr), (void)(size))
+#endif
