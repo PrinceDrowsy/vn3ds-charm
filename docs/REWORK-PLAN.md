@@ -1176,7 +1176,13 @@ The old pipeline is frozen (D22).
     - **R2.5 Serializer (D19) and comparison:** MicroPython's store against
       the oracle, value by value. A description object compares by its
       lowered record (§6.3), since its attributes are the shim's and not
-      Ren'Py's; everything else compares as it is.
+      Ren'Py's; everything else compares as it is. Floats from the maths
+      library compare within a few units in the last place: libm results
+      differ between the PC that harvested and the 3DS (MicroPython's
+      `math.hypot` and CPython 3's differ in the 16th digit). Values that
+      depend on Python 2's dict order (keyword arguments applied in hash
+      order, such as a `Transform` given `around` and `angle` together)
+      are reported as order-dependent rather than wrong.
     - **R2.6 On device:** a full init on Old 3DS matches the snapshot.
 - **R3 — Engine core: Jisei on hardware.**
   - Platform layers (3DS + desktop); VM; scene model; renderer with TEV
