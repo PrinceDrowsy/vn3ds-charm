@@ -810,6 +810,20 @@ The old pipeline is frozen (D22).
     that still misses, D9 is reopened with the measured numbers.
   - Exit: the numbers are recorded here and the go/no-go decided.
   - *Plan re-review (D1).*
+  - **H.1 results, 2026-11-13, Old 3DS, `.3dsx` (64 MB app region),
+    MicroPython 1.29.0, 16 MB GC heap,** `spikes/hardware/` with its
+    synthetic Mice Tea-sized workload:
+    - Interaction: mean 36.7 ms, worst 45.0 ms. Pass, with a thin margin.
+    - Per-frame callbacks (3 ATL functions, a DynamicDisplayable, a 60-glyph
+      kinetic text tag): mean 1.8 ms, worst 4.5 ms. **Fail.**
+    - Heap in use 1.2 MB. Pass. Rollback snapshot 1.2 KB.
+    - `gc.collect()` 148–161 ms on the 16 MB heap.
+    - Setup of the store 5.1 s, which D18 moves to the PC.
+    - SD through stdio: write 6.0 MB/s, sequential read 9.0 MB/s, random
+      4 KB reads 5.3 ms mean and 7.5 ms worst.
+    - Azahar came within about 15% of these timings.
+    - Next, H.2: per-callback breakdown, GC time against heap size, native
+      ARM code from `mpy-cross`, and a working largest-allocation probe.
 - **R1 — Harvester.**
   - Full harvest (§5) to the R0 schema, Jisei first, then the whole corpus
     as a running metric; the oracle frame-capture helper.
