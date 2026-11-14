@@ -6,6 +6,7 @@ writes what it produced, for Witch to compare with Ren'Py's own (R2.3).
 import builtins
 import io
 import json
+import os
 import sys
 
 # Pure-Python stand-ins for standard modules MicroPython doesn't ship, and
@@ -18,6 +19,7 @@ import charm_stdlib  # noqa: E402
 import renpy  # noqa: E402
 from renpy import missing, py2, revertable  # noqa: E402
 from renpy.python import StoreModule, create_store, store_dicts  # noqa: E402
+from renpy.styledata import stylesets  # noqa: E402
 
 
 def run(step):
@@ -28,6 +30,11 @@ def run(step):
     main = store_dicts["store"]
     if kind in ("Python", "EarlyPython"):
         exec(code(step, "code"), create_store(step["store"]))
+    elif kind == "CreateStore":
+        if step["store"] not in renpy.config.special_namespaces:
+            create_store(step["store"])
+    elif kind == "EarlyConfig":
+        setattr(renpy.config, step["varname"], eval(code(step, "code"), main))
     elif kind == "Define":
         store = create_store(step["store"])
         value = eval(code(step, "code"), main)
@@ -63,19 +70,51 @@ def run(step):
         _charm.screen(step["name"], step["node"])
     elif kind == "TranslateString":
         _charm.translate_string(step["language"], step["old"], step["new"])
+    elif kind == "Style":
+        if renpy.config.defer_styles:
+            # Applied when the language is set, after init (§8.10).
+            renpy.translation.deferred_styles.append(step["node"])
+        else:
+            apply_style(step)
     elif kind == "Pass":
         pass
     else:
-        # Styles join with the style descriptions (R2.4c). Until then
-        # they're listed, not run.
         missing.record("statement " + kind)
 
 
 def code(step, field):
-    entry = step[field]
+    return source(step[field])
+
+
+def source(entry):
     if "error" in entry:
         raise SyntaxError(entry["error"])
     return entry["source"]
+
+
+def apply_style(step):
+    """Ren'Py's ast.Style.apply."""
+    main = store_dicts["store"]
+    if step["variant"] is not None and not renpy.exports.variant(eval(code(step, "variant"), main)):
+        return
+    s = renpy.style.get_or_create_style(step["name"])
+    if step["clear"]:
+        s.clear()
+    if step["parent"] is not None:
+        s.set_parent(step["parent"])
+    if step["take"] is not None:
+        s.take(step["take"])
+    for name in step["delattr"]:
+        s.delattr(name)
+    if step["properties"]:
+        properties = {}
+        for name, entry in step["properties"]:
+            value = eval(source(entry), main)
+            if name == "properties":
+                properties.update(value)
+            else:
+                properties[name] = value
+        s.add_properties(properties)
 
 
 def traceback_text(e):
@@ -135,21 +174,27 @@ def qualified(obj):
 
 def stand_in_modules(names):
     """Registers a placeholder for each of the game's Ren'Py modules the shim
-    doesn't implement, so importing it works. `names` is sorted, so parents
-    come before their submodules."""
+    doesn't implement, so importing it works. The shim's own modules aren't
+    imported here: they build on Ren'Py's own (renpy.object), which load
+    after this."""
     for name in names:
-        if name in sys.modules:
+        if name in sys.modules or shim_has(name):
             continue
-        parent, _, child = name.rpartition(".")
-        if not isinstance(sys.modules.get(parent), missing.MissingModule):
-            try:
-                __import__(name)
-                continue  # the shim has it
-            except (ImportError, AttributeError):  # AttributeError: a plain module has no __path__
-                pass
         module = sys.modules[name] = missing.MissingModule(name)
-        if parent:
+        parent, _, child = name.rpartition(".")
+        if parent in sys.modules:
             setattr(sys.modules[parent], child, module)
+
+
+def shim_has(name):
+    path = name.replace(".", "/")
+    for candidate in (path + ".py", path + "/__init__.py"):
+        try:
+            os.stat(candidate)
+            return True
+        except OSError:
+            pass
+    return False
 
 
 def load_module(name, entry, attempt):
@@ -188,8 +233,10 @@ def post_import():
 
 def startup():
     """What Ren'Py's main does between loading the script and running init:
-    the store's self-reference and style manager, then persistent data (fresh
-    on a first run) and the preferences it carries."""
+    the screen variants (a PC's, since the port reproduces the PC game), the
+    store's self-reference and style manager, then persistent data (fresh on
+    a first run) and the preferences it carries."""
+    renpy.config.variants = ["large", "pc", None]
     store = store_dicts["store"]
     store["store"] = sys.modules["store"]
     store["style"] = renpy.style.StyleManager()
@@ -222,6 +269,8 @@ def main(program_path, result_path):
                            "error": "%s: %s" % (type(e).__name__, e), "trace": traceback_text(e)})
             return False
 
+    if program["style_tables"] is not None:
+        stylesets.load(program["style_tables"])
     attempt(("renpy modules", 0), stand_in_modules, program["renpy_modules"])
     for name, entry in program["modules"]:  # in the harvest's load order
         attempt((name, 0), load_module, name, entry, attempt)
@@ -247,6 +296,8 @@ def main(program_path, result_path):
                        "screens": _charm.screens,
                        "defaults": [list(d) for d in _charm.defaults],
                        "strings": _charm.strings,
+                       "styles": [[list(name), dumper.value(style)] for name, style in renpy.style.styles.items()],
+                       "deferred_styles": renpy.translation.deferred_styles,
                    }}, f)
 
 

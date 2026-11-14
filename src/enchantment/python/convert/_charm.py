@@ -13,6 +13,10 @@ def image(name, d):
     images[name] = d
 
 
+def get_image(name):
+    return images.get(name)
+
+
 def has_image(name):
     return name in images
 

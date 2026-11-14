@@ -4,6 +4,7 @@ doesn't have resolve to submodules or placeholders."""
 import _charm
 import renpy
 from renpy import submodule_or_missing
+from renpy.atl import atl_warper  # noqa: F401
 
 
 def image(name, d):
@@ -11,7 +12,7 @@ def image(name, d):
         raise Exception("Images may not be declared to be None.")
     if not isinstance(name, tuple):
         name = tuple(name.split())
-    _charm.image(name, renpy.easy.displayable(d))
+    renpy.display.image.register_image(name, renpy.easy.displayable(d))
 
 
 def has_image(name, exact=False):
@@ -35,6 +36,34 @@ def has_screen(name):
     if not isinstance(name, tuple):
         name = tuple(name.split())
     return bool(name) and _charm.has_screen(name[0])
+
+
+def register_statement(*args, **kwargs):
+    # renpy.statements runs from the game's source, loaded after this module.
+    return renpy.statements.register(*args, **kwargs)
+
+
+def variant(name):
+    if isinstance(name, str):
+        return name in renpy.config.variants
+    for n in name:
+        if n in renpy.config.variants:
+            return True
+    return False
+
+
+def pure(fn):
+    # Marks for Ren'Py's static analysis, which only its image prediction
+    # uses; the engine predicts from the node graph (§11).
+    return fn
+
+
+def const(name):
+    pass
+
+
+def not_const(name):
+    pass
 
 
 def __getattr__(name):
