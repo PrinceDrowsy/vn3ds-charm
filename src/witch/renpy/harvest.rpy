@@ -27,8 +27,12 @@ init 999999 python:
         os._exit(0)
 
     def _witch_harvest_to(path):
+        import ast
         import json
         import os
+        import sys
+
+        py2 = sys.version_info[0] == 2
 
         # In the store, list/dict/set are Ren'Py's revertable subclasses, so
         # the real built-ins are fetched for isinstance, and for the big
@@ -82,6 +86,22 @@ init 999999 python:
                 args.append([None, text(info.extrakw)])
             return {"call": args, "starred": sorted(starred), "doublestarred": sorted(doublestarred)}
 
+        def needs_old_flags(source, mode):
+            """Ren'Py 6/7 compiles with print_function and unicode_literals,
+            and retries without them if that fails (py_compile)."""
+            escape = getattr(renpy.python, "escape_unicode", None)
+            try:
+                compile(escape(source) if escape else source, "<witch>", "exec" if mode == "hide" else mode,
+                        ast.PyCF_ONLY_AST | renpy.python.new_compile_flags, 1)
+                return False
+            except Exception:
+                return True
+
+        def future_names(flags):
+            import __future__
+            return sorted(name for name in __future__.all_feature_names
+                          if flags & getattr(__future__, name).compiler_flag)
+
         def node_name(name):
             if isinstance(name, tuple):
                 return "|".join(str(part) for part in name)
@@ -99,8 +119,10 @@ init 999999 python:
                 return {"node": i}
             if isinstance(value, renpy.ast.PyCode):
                 source = value.source
-                return {"code": source if isinstance(source, text_types) else repr(source),
-                        "mode": value.mode}
+                out = {"code": source if isinstance(source, text_types) else repr(source), "mode": value.mode}
+                if py2 and needs_old_flags(out["code"], value.mode):
+                    out["old_flags"] = True
+                return out
             if isinstance(value, renpy.ast.PyExpr):
                 return {"expr": value + ""}
             if isinstance(value, text_types):
@@ -168,6 +190,86 @@ init 999999 python:
 
         named = builtins.set(id(n) for n in script.namemap.values())
 
+        # Init order exactly as Ren'Py runs it: (priority, first node).
+        initcode = [[item[0], index.get(id(item[-1]))] for item in script.initcode]
+
+        # The store after init, the oracle for Witch's own init (REWORK-PLAN
+        # §6.1). Containers and objects get an id when first written and are
+        # a {"ref": id} after, so shared and cyclic values are kept; dicts
+        # and sets are sorted so the output doesn't depend on hash order.
+        seen = {}
+        alive = []  # keeps encoded objects alive, so their ids can't be reused
+        int_types = (builtins.int, getattr(builtins, "long", builtins.int))
+        import types
+        module_type = types.ModuleType
+        function_types = (types.FunctionType, types.BuiltinFunctionType, types.MethodType)
+
+        def qualified(obj):
+            return "%s.%s" % (getattr(obj, "__module__", None) or "?", getattr(obj, "__name__", "?"))
+
+        def sort_key(encoded):
+            return json.dumps(encoded, sort_keys=True)
+
+        def val(v, depth=0):
+            if v is None or isinstance(v, builtins.bool):
+                return v
+            if isinstance(v, int_types):
+                return v if -2**53 < v < 2**53 else {"int": builtins.str(v)}
+            if isinstance(v, builtins.float):
+                return v if v == v and v not in (float("inf"), float("-inf")) else {"float": repr(v)}
+            if isinstance(v, text_types):
+                if py2 and isinstance(v, builtins.str):
+                    try:
+                        return v.decode("ascii")
+                    except UnicodeDecodeError:
+                        return {"bytes": v.encode("hex")}
+                return v
+            if isinstance(v, module_type):
+                return {"module": v.__name__}
+            if isinstance(v, function_types):
+                return {"function": qualified(getattr(v, "__func__", v))}
+            if isinstance(v, type) or (py2 and type(v).__name__ == "classobj"):
+                return {"class": qualified(v)}
+            if depth > 40:
+                return {"too_deep": type(v).__name__}
+            key = id(v)
+            if key in seen:
+                return {"ref": seen[key]}
+            seen[key] = len(seen)
+            alive.append(v)
+            out = {"id": seen[key]}
+            if isinstance(v, builtins.list):
+                out["list"] = [val(x, depth + 1) for x in v]
+            elif isinstance(v, builtins.tuple):
+                out["tuple"] = [val(x, depth + 1) for x in v]
+            elif isinstance(v, builtins.dict):
+                pairs = [[val(k, depth + 1), val(x, depth + 1)] for k, x in v.items()]
+                out["dict"] = sorted(pairs, key=lambda p: sort_key(p[0]))
+            elif isinstance(v, (builtins.set, builtins.frozenset)):
+                out["set"] = sorted((val(x, depth + 1) for x in v), key=sort_key)
+            else:
+                out["object"] = qualified(type(v))
+                attrs = {}
+                for name in attribute_names(v):
+                    try:
+                        attrs[name] = val(getattr(v, name), depth + 1)
+                    except AttributeError:
+                        pass  # an empty slot
+                out["attrs"] = attrs
+            return out
+
+        def attribute_names(v):
+            """An object's own state: its slots and instance dict, not class
+            attributes or properties."""
+            names = builtins.set(getattr(v, "__dict__", {}))
+            for klass in type(v).__mro__:
+                slots = getattr(klass, "__slots__", ())
+                names.update([slots] if isinstance(slots, text_types) else slots)
+            return sorted(n for n in names if not n.startswith("__"))
+
+        def own(name):
+            return not name.startswith("__") and not name.startswith("_witch")
+
         # Nodes are written one at a time: a large game held whole in memory
         # doesn't fit in a 32-bit Ren'Py 6. The file is written under a
         # temporary name and renamed, so a finished file means a finished harvest.
@@ -179,8 +281,23 @@ init 999999 python:
                     f.write(",\n")
                 json.dump(node_entry(n), f)
             f.write('],\n"labels": %s,\n"images": %s,\n"named_nodes": %d,\n"named_outside_graph": %d,\n'
-                    '"unindexed_refs": %s}' % (json.dumps(labels), json.dumps(images), len(named),
-                                               len(named - builtins.set(index)), json.dumps(unknown_refs)))
+                    '"unindexed_refs": %s,\n' % (json.dumps(labels), json.dumps(images), len(named),
+                                                 len(named - builtins.set(index)), json.dumps(unknown_refs)))
+            python = {"version": list(sys.version_info[:3])}
+            if py2:
+                python["new_flags"] = future_names(renpy.python.new_compile_flags)
+                python["old_flags"] = future_names(renpy.python.old_compile_flags)
+            file_flags = getattr(renpy.python, "file_compiler_flags", {})
+            python["file_flags"] = dict((k, future_names(v)) for k, v in file_flags.items() if v)
+            f.write('"python": %s,\n"initcode": %s,\n"config": ' % (json.dumps(python), json.dumps(initcode)))
+            json.dump(dict((k, val(v)) for k, v in sorted(vars(renpy.config).items()) if own(k)), f)
+            f.write(',\n"store": {')
+            for i, (store_name, store) in enumerate(sorted(renpy.python.store_dicts.items())):
+                if i:
+                    f.write(",\n")
+                f.write("%s: " % json.dumps(store_name))
+                json.dump(dict((k, val(v)) for k, v in sorted(store.items()) if own(k)), f)
+            f.write("}}")
         os.rename(path + ".part", path)
 
     import os as _witch_os
