@@ -25,6 +25,8 @@ class Missing:
         record(path)
 
     def __getattr__(self, name):
+        if name.startswith("__"):
+            raise AttributeError(name)  # so hasattr() probes see the truth
         return Missing(self._path + "." + name)
 
     def __call__(self, *args, **kwargs):
@@ -32,6 +34,26 @@ class Missing:
 
     def __repr__(self):
         return "<missing %s>" % self._path
+
+
+class MissingModule:
+    """One of Ren'Py's modules the shim doesn't have, registered in
+    sys.modules so imports of it work; attributes are its loaded submodules
+    or placeholders."""
+
+    def __init__(self, name):
+        self._name = name
+        record(name)
+
+    def __getattr__(self, attr):
+        if attr.startswith("__"):
+            raise AttributeError(attr)
+        import sys
+        sub = sys.modules.get(self._name + "." + attr)
+        return sub if sub is not None else Missing(self._name + "." + attr)
+
+    def __repr__(self):
+        return "<missing module %s>" % self._name
 
 
 def report():

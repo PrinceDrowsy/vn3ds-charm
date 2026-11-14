@@ -8,6 +8,8 @@ the shim's driver to run.
 """
 from __future__ import annotations
 
+import ast
+
 from . import py2
 
 # Init-time statement classes and the fields whose code they run.
@@ -66,6 +68,12 @@ def _step(harvest: dict, index: int) -> dict:
     return step
 
 
+def _statements(source: str) -> list[dict]:
+    """A module's top-level statements, run one at a time so that a part the
+    shim can't support yet doesn't stop the rest from loading."""
+    return [{"line": stmt.lineno, "source": ast.unparse(stmt)} for stmt in ast.parse(source).body]
+
+
 def _is_harvester(n: dict) -> bool:
     return "zzz_witch_harvest" in n["file"]
 
@@ -83,16 +91,19 @@ def program(harvest: dict) -> dict:
             steps.append(_step(harvest, i))
             i = nodes[i]["next"]
         init.append({"priority": priority, "steps": steps})
-    modules = {}
-    for name, entry in harvest["modules"].items():
+    modules = []  # in load order
+    for name, entry in harvest["modules"]:
         if "source" in entry:
-            modules[name] = {"source": entry["source"]}
+            source = entry["source"]
         elif "ast" in entry:
             try:
-                modules[name] = {"source": py2.to_source(entry["ast"], "exec")}
+                source = py2.to_source(entry["ast"], "exec")
             except py2.ConversionError as e:
-                modules[name] = {"error": f"Python 2 conversion: {e}"}
+                modules.append([name, {"error": f"Python 2 conversion: {e}"}])
+                continue
         else:
-            modules[name] = entry
+            modules.append([name, entry])
+            continue
+        modules.append([name, {"statements": _statements(source)}])
     return {"py2": harvest["python"]["version"][0] == 2, "renpy_version": harvest["renpy_version"],
-            "modules": modules, "early": early, "init": init}
+            "renpy_modules": harvest["renpy_modules"], "modules": modules, "early": early, "init": init}

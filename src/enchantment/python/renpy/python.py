@@ -2,9 +2,10 @@
 in, reachable as a module (`import store.gui`, `from store import x`) and as
 an attribute of its parent store. Ren'Py 6.x/7.x also keep the revertable
 containers here, where their minstore imports them from."""
+import builtins
 import sys
 
-from renpy import submodule_or_missing
+from renpy import missing_attribute
 from renpy.revertable import (RevertableDict, RevertableList, RevertableObject, RevertableSet,  # noqa: F401
                               revertable_range, revertable_sorted)
 
@@ -40,7 +41,7 @@ def create_store(name):
     parent, _, var = name.rpartition(".")
     if parent:
         create_store(parent)
-    d = store_dicts[name] = {"__name__": name, "__package__": name}
+    d = store_dicts[name] = {"__name__": name, "__package__": name, "__builtins__": builtins.__dict__}
     for k, v in sys.modules["renpy.minstore"]._dict.items():
         if k not in d:
             d[k] = v
@@ -63,4 +64,4 @@ def py_eval(source, globals=None, locals=None):
 
 
 def __getattr__(name):
-    return submodule_or_missing("renpy.python", name)
+    return missing_attribute("renpy.python", name)

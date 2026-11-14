@@ -9,6 +9,8 @@ friends as aliases, and on a Python 2 game keys(), values() and items()
 return lists. PY2 is set by the driver for Python 2 games.
 """
 
+from charm_stdlib import DefaultFactory, with_factory
+
 PY2 = False
 
 
@@ -39,21 +41,12 @@ class RevertableDict(dict):
         return key in self
 
 
-class RevertableDefaultDict(RevertableDict):
-    """collections.defaultdict, which MicroPython doesn't have built in."""
+class _RevertableDefaultDict(DefaultFactory, RevertableDict):
+    pass
 
-    def __init__(self, default_factory=None, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.default_factory = default_factory
 
-    def __getitem__(self, key):
-        try:
-            return super().__getitem__(key)
-        except KeyError:
-            if self.default_factory is None:
-                raise
-            value = self[key] = self.default_factory()
-            return value
+def RevertableDefaultDict(default_factory=None, *args, **kwargs):
+    return with_factory(_RevertableDefaultDict, default_factory, args, kwargs)
 
 
 class RevertableSet(set):

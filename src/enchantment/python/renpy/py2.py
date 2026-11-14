@@ -33,6 +33,23 @@ def py2_div_item(obj, key, b):
     obj[key] = py2_div(obj[key], b)
 
 
+_DICT_FALLBACKS = {
+    "iteritems": lambda d: iter(d.items()),
+    "iterkeys": lambda d: iter(d.keys()),
+    "itervalues": lambda d: iter(d.values()),
+    "has_key": lambda d, key: key in d,
+}
+
+
+def py2_method(obj, name, *args):
+    """A Python 2 dict method: the object's own if it has one (Ren'Py's
+    revertable dicts do), else what Python 2's dict did."""
+    method = getattr(obj, name, None)
+    if method is not None:
+        return method(*args)
+    return _DICT_FALLBACKS[name](obj, *args)
+
+
 def py2_round(x, digits=0):
     """Python 2 rounds halves away from zero and always returns a float."""
     scale = 10.0 ** digits
@@ -60,6 +77,7 @@ def install(builtins):
     builtins.__py2_div__ = py2_div
     builtins.__py2_div_attr__ = py2_div_attr
     builtins.__py2_div_item__ = py2_div_item
+    builtins.__py2_method__ = py2_method
     builtins.unicode = str
     builtins.basestring = str
     builtins.long = int

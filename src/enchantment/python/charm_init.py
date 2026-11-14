@@ -8,9 +8,13 @@ import io
 import json
 import sys
 
-import renpy
-from renpy import missing, py2, revertable
-from renpy.python import StoreModule, create_store, store_dicts
+# Pure-Python stand-ins for standard modules MicroPython doesn't ship.
+sys.path.append("stdlib")
+
+import charm_stdlib  # noqa: E402
+import renpy  # noqa: E402
+from renpy import missing, py2, revertable  # noqa: E402
+from renpy.python import StoreModule, create_store, store_dicts  # noqa: E402
 
 
 def run(step):
@@ -100,15 +104,45 @@ def qualified(obj):
     return "%s.%s" % (getattr(obj, "__module__", None) or "?", getattr(obj, "__name__", "?"))
 
 
-def load_module(name, entry):
+def stand_in_modules(names):
+    """Registers a placeholder for each of the game's Ren'Py modules the shim
+    doesn't implement, so importing it works. `names` is sorted, so parents
+    come before their submodules."""
+    for name in names:
+        if name in sys.modules:
+            continue
+        parent, _, child = name.rpartition(".")
+        if not isinstance(sys.modules.get(parent), missing.MissingModule):
+            try:
+                __import__(name)
+                continue  # the shim has it
+            except (ImportError, AttributeError):  # AttributeError: a plain module has no __path__
+                pass
+        module = sys.modules[name] = missing.MissingModule(name)
+        if parent:
+            setattr(sys.modules[parent], child, module)
+
+
+def load_module(name, entry, attempt):
     """Runs one of Ren'Py's own modules from the game's source, as that
-    module, and makes it importable."""
+    module, one top-level statement at a time, and makes it importable."""
     if "error" in entry:
         raise ImportError("%s: %s" % (name, entry["error"]))
-    d = {"__name__": name}
+    d = {"__name__": name, "__builtins__": builtins.__dict__}  # a dict, as in a CPython module
     sys.modules[name] = module = StoreModule(d)
     setattr(renpy, name.rpartition(".")[2], module)
-    exec(entry["source"], d)
+    for statement in entry["statements"]:
+        attempt((name, statement["line"]), exec, statement["source"], d)
+
+
+def shim_vars(obj=None):
+    """MicroPython has no vars(). Ren'Py's code mutates what it returns, so
+    for the shim's dict-backed modules it's the backing dict itself."""
+    if obj is None:
+        raise TypeError("vars() without an argument isn't supported")
+    if isinstance(obj, StoreModule):
+        return obj._dict
+    return obj.__dict__
 
 
 def post_import():
@@ -123,22 +157,47 @@ def post_import():
     store["eval"] = defaultstore["eval"]
 
 
+def startup():
+    """What Ren'Py's main does between loading the script and running init:
+    the store's self-reference and style manager, then persistent data (fresh
+    on a first run) and the preferences it carries."""
+    store = store_dicts["store"]
+    store["store"] = sys.modules["store"]
+    store["style"] = renpy.style.StyleManager()
+    persistent = sys.modules["renpy.persistent"]._dict["Persistent"]()
+    renpy.game.persistent = persistent
+    renpy.game.preferences = persistent._preferences
+    store["persistent"] = persistent
+    store["_preferences"] = persistent._preferences
+    store["_test"] = renpy.test.testast._test
+
+
 def main(program_path, result_path):
     with open(program_path) as f:
         program = json.load(f)
+    builtins.vars = shim_vars
+    charm_stdlib.install()
     if program["py2"]:
         revertable.PY2 = True
         py2.install(builtins)
 
     errors = []
-    for name in ("renpy.minstore", "renpy.defaultstore"):
-        missing.where = (name, 0)
+
+    def attempt(where, function, *args):
+        missing.where = where
         try:
-            load_module(name, program["modules"][name])
+            function(*args)
+            return True
         except Exception as e:
-            errors.append({"node": None, "class": "module", "file": name, "line": 0,
+            errors.append({"node": None, "class": "startup", "file": where[0], "line": where[1],
                            "error": "%s: %s" % (type(e).__name__, e), "trace": traceback_text(e)})
-    post_import()
+            return False
+
+    attempt(("renpy modules", 0), stand_in_modules, program["renpy_modules"])
+    for name, entry in program["modules"]:  # in the harvest's load order
+        attempt((name, 0), load_module, name, entry, attempt)
+    attempt(("post_import", 0), post_import)
+    attempt(("startup", 0), startup)
 
     ran = 0
     for step in program["early"] + [s for block in program["init"] for s in block["steps"]]:
