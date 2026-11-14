@@ -64,6 +64,23 @@
 - **SKILL-011: Inherited vs introduced.** Give the verifier what the original
   engine itself loaded (`Source`: labels, image tags). A fault the original
   has too is reported but doesn't gate the build.
+- **SKILL-013: Grow a shim from placeholders.** Unimplemented API names
+  resolve to recording placeholders (with the statement running at the
+  time), unimplemented modules to placeholder modules registered in
+  `sys.modules` from the original's own module list, and the original
+  library's pure-Python modules run from its source a statement at a time.
+  One run then lists every gap, ranked. Dunder names must never be
+  placeholders (import machinery and `hasattr` probe them), and a package's
+  catch-all must try the real submodule first.
+- **SKILL-014: MicroPython vs CPython, as found running Ren'Py's code.**
+  `dict(x)`/`update(x)` ignore dict subclasses (patched:
+  `src/enchantment/micropython/patches/`); a built-in subclass is built
+  from the constructor's arguments before `__init__`, and `super()` doesn't
+  reach its special methods (use `get`, factories); unbound `dict.items(self)`
+  fails on subclasses (use `super()`); no `vars`, `collections.defaultdict`,
+  `copy`, `os.environ`; built-in modules are read-only (proxy them in
+  `sys.modules`); module `__getattr__`, `exec` into dicts and overriding
+  built-ins all work.
 - **SKILL-012: Spike on the real target early,** with go/no-go numbers set in
   advance, and keep the spike's code (`spikes/hardware/`) so the numbers can
   be reproduced.

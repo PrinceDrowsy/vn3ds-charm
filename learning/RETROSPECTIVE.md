@@ -111,6 +111,19 @@ The first phases of `docs/REWORK-PLAN.md`: the bundle format and verifier
   catch-all must try the real thing first (import the submodule), and its
   uses must be reported, never silent.
 
+- **Order lost through a Python 2 dict.** (R2.4) The harvest built its
+  module list as a dict inside Ren'Py's Python 2, where dicts are unordered,
+  so `renpy.preferences` loaded before the `renpy.object` it subclasses.
+  *Prevention:* anything the harvest emits whose order matters is a list of
+  pairs; never rely on dict order in code that may run on Python 2.
+- **Staged changes went into the wrong commit.** (R2.4) A `git rm` staged
+  earlier rode along with an unrelated "normalize line endings" commit,
+  because `git add X && git commit` commits everything staged. Pushed, so
+  left as is. *Prevention:* `git diff --cached --stat` before every commit.
+- **Line endings again.** Four files had been committed as CRLF after Python
+  `write_text` rewrites. *Prevention:* same as above; and
+  `git ls-files --eol | grep crlf` now and then.
+
 ### What to do differently
 
 - Run the widest corpus as early as possible: the version differences
