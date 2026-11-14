@@ -8,8 +8,11 @@ Python 2 form is already understood exactly; this maps its tree onto Python
   `division` future), so it becomes __py2_div__(a, b); augmented forms go
   through helpers that evaluate the target once, as Python does.
 - Byte-string literals (no `unicode_literals`) become text, as games use them.
-- print/exec statements, `raise E, msg`, `except E, e`, tuple parameters and
-  backticks become their Python 3 spellings.
+- print/exec statements, `raise E, msg`, `except E, e`, tuple parameters,
+  backticks and function attributes (`func_name`) become their Python 3
+  spellings.
+- keys()/values()/items() return lists and the iter*/has_key methods work,
+  through __py2_method__.
 
 The __py2_*__ helpers are part of the shim's contract (REWORK-PLAN §6).
 """
@@ -23,6 +26,14 @@ PY2_DIV_ITEM = "__py2_div_item__"  # obj[key] /= b  ->  helper(obj, key, b)
 PY2_METHOD = "__py2_method__"  # obj.iteritems()  ->  helper(obj, "iteritems")
 
 _PY2_DICT_METHODS = {"iteritems", "iterkeys", "itervalues", "has_key"}
+_PY2_LIST_METHODS = {"keys", "values", "items"}  # lists in Python 2, views in 3
+
+# Python 2's function and method attributes (as 2to3's funcattrs/methodattrs).
+_RENAMED_ATTRIBUTES = {
+    "func_name": "__name__", "func_globals": "__globals__", "func_code": "__code__",
+    "func_defaults": "__defaults__", "func_dict": "__dict__", "func_closure": "__closure__",
+    "func_doc": "__doc__", "im_func": "__func__", "im_self": "__self__",
+}
 
 _SIMPLE = {
     # Operators and contexts carry no fields and keep their names, except
@@ -336,7 +347,8 @@ class _Converter:
 
     def expr_Call(self, n):
         func = n["func"]
-        if func["_"] == "Attribute" and func["attr"] in _PY2_DICT_METHODS:
+        if func["_"] == "Attribute" and (func["attr"] in _PY2_DICT_METHODS
+                                         or func["attr"] in _PY2_LIST_METHODS and not n["args"] and not n["keywords"]):
             # The object's own method if it has one, else Python 2's dict
             # behaviour: Ren'Py's own modules call these on plain dicts.
             return _call(PY2_METHOD, self.expr(func["value"]), ast.Constant(func["attr"]), *self.exprs(n["args"]))
@@ -363,7 +375,8 @@ class _Converter:
         return ast.Constant(value=_text(n["s"]))
 
     def expr_Attribute(self, n):
-        return ast.Attribute(value=self.expr(n["value"]), attr=n["attr"], ctx=self.simple(n["ctx"]))
+        return ast.Attribute(value=self.expr(n["value"]), attr=_RENAMED_ATTRIBUTES.get(n["attr"], n["attr"]),
+                             ctx=self.simple(n["ctx"]))
 
     def expr_Subscript(self, n):
         return ast.Subscript(value=self.expr(n["value"]), slice=self.slice(n["slice"]), ctx=self.simple(n["ctx"]))

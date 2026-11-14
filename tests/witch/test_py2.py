@@ -153,3 +153,17 @@ def test_dict_methods_go_through_the_py2_helper_and_object_new_drops_extras():
     assert to_source(has_key, "eval") == "__py2_method__(d, 'has_key', 'k')"
     new = call({"_": "Attribute", "value": name("object"), "attr": "__new__", "ctx": L}, name("cls"), name("n"))
     assert to_source(new, "eval") == "object.__new__(cls)"
+
+
+def test_keys_values_items_become_lists_only_when_called_bare():
+    keys = call({"_": "Attribute", "value": name("d"), "attr": "keys", "ctx": L})
+    items_arg = call({"_": "Attribute", "value": name("o"), "attr": "items", "ctx": L}, num(1))
+    assert to_source(keys, "eval") == "__py2_method__(d, 'keys')"
+    assert to_source(items_arg, "eval") == "o.items(1)"
+
+
+def test_function_attributes_take_their_python_3_names():
+    func_name = {"_": "Attribute", "value": name("f"), "attr": "func_name", "ctx": L}
+    im_self = {"_": "Attribute", "value": name("m"), "attr": "im_self", "ctx": L}
+    assert to_source(func_name, "eval") == "f.__name__"
+    assert to_source(im_self, "eval") == "m.__self__"

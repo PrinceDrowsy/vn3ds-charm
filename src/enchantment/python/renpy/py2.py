@@ -41,13 +41,20 @@ _DICT_FALLBACKS = {
 }
 
 
+_LISTED = ("keys", "values", "items")
+
+
 def py2_method(obj, name, *args):
     """A Python 2 dict method: the object's own if it has one (Ren'Py's
-    revertable dicts do), else what Python 2's dict did."""
+    revertable dicts do), else what Python 2's dict did. keys(), values()
+    and items() return lists, as they did in Python 2."""
     method = getattr(obj, name, None)
-    if method is not None:
-        return method(*args)
-    return _DICT_FALLBACKS[name](obj, *args)
+    if method is None:
+        return _DICT_FALLBACKS[name](obj, *args)
+    result = method(*args)
+    if name in _LISTED and not isinstance(result, list):
+        return list(result)
+    return result
 
 
 def py2_round(x, digits=0):
