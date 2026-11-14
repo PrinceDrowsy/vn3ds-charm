@@ -1,16 +1,34 @@
 # Witch's Ren'Py harvester (REWORK-PLAN §5). Copied into a scratch copy of a
-# game and run by the game's own Ren'Py as `<game> . witch_harvest`, with the
-# output path in WITCH_HARVEST_OUT. Runs on Ren'Py 6.17-8.x, so it must stay
-# valid Python 2 and Python 3. It records what Ren'Py loaded, as plainly as
-# possible; mapping onto the bundle format happens in Witch, where it's tested.
+# game; when the game's own Ren'Py starts with WITCH_HARVEST_OUT set, it
+# harvests at the end of init and exits. Runs on Ren'Py 6.15-8.x, so it must
+# stay valid Python 2 and Python 3. It records what Ren'Py loaded, as plainly
+# as possible; mapping onto the bundle format happens in Witch, where it's
+# tested.
+#
+# It runs as init code rather than a registered command because how a
+# game's launcher passes arguments differs between Ren'Py versions, and
+# because some games stop on Steam or splash screens after init.
 
-init 999 python:
+init 999999 python:
 
     def _witch_harvest():
+        import os
+        import traceback
+
+        # A failure goes back to Witch as <output>.error: some Ren'Py versions
+        # show an error screen and wait instead of writing traceback.txt.
+        path = os.environ["WITCH_HARVEST_OUT"]
+        try:
+            _witch_harvest_to(path)
+        except Exception:
+            with open(path + ".error", "w") as f:
+                f.write(traceback.format_exc())
+        # Straight out, without starting the game or saving anything.
+        os._exit(0)
+
+    def _witch_harvest_to(path):
         import json
         import os
-
-        renpy.arguments.takes_no_arguments("Witch's harvester")
 
         # In the store, list/dict/set are Ren'Py's revertable subclasses, so
         # the real built-ins are fetched for isinstance, and for the big
@@ -143,7 +161,6 @@ init 999 python:
         # Nodes are written one at a time: a large game held whole in memory
         # doesn't fit in a 32-bit Ren'Py 6. The file is written under a
         # temporary name and renamed, so a finished file means a finished harvest.
-        path = os.environ["WITCH_HARVEST_OUT"]
         with open(path + ".part", "w") as f:
             f.write('{"harvest_version": 2, "renpy_version": %s, "screen_size": %s, "nodes": ['
                     % (json.dumps(renpy.version()), json.dumps([config.screen_width, config.screen_height])))
@@ -155,6 +172,7 @@ init 999 python:
                     '"unindexed_refs": %s}' % (json.dumps(labels), json.dumps(images), len(named),
                                                len(named - builtins.set(index)), json.dumps(unknown_refs)))
         os.rename(path + ".part", path)
-        return False
 
-    renpy.arguments.register_command("witch_harvest", _witch_harvest)
+    import os as _witch_os
+    if "WITCH_HARVEST_OUT" in _witch_os.environ:
+        _witch_harvest()

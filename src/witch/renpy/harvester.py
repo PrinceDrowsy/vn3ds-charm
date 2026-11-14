@@ -12,12 +12,15 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import struct
 import subprocess
 import time
+import zlib
+from datetime import datetime
 from pathlib import Path
 
 HARVEST_RPY = Path(__file__).with_name("harvest.rpy")
-INSTALLED_NAME = "zzz_witch_harvest.rpy"  # sorts last, so it runs after the game's own init 999 code
+INSTALLED_NAME = "zzz_witch_harvest.rpy"
 
 
 class HarvestError(Exception):
@@ -60,40 +63,93 @@ def prepare(game_dir: Path, scratch: Path) -> Path:
     return copy
 
 
+def _script_bodies(path: Path):
+    """The decompressed contents of a .rpyc (both of Ren'Py's layouts), or a .rpy's text."""
+    data = path.read_bytes()
+    if path.suffix == ".rpy":
+        yield data
+        return
+    chunks = []
+    if data.startswith(b"RENPY RPC2"):
+        pos = 10
+        while True:
+            slot, start, length = struct.unpack_from("<III", data, pos)
+            pos += 12
+            if slot == 0:
+                break
+            chunks.append(data[start:start + length])
+    else:
+        chunks.append(data)
+    for chunk in chunks:
+        try:
+            yield zlib.decompress(chunk)
+        except zlib.error:
+            pass
+
+
+def relaunches_through_steam(game_dir: Path) -> bool:
+    """Whether the game's loose scripts call SteamAPI_RestartAppIfNecessary:
+    started outside Steam, such a game has Steam launch the installed copy
+    and exits."""
+    return any(b"RestartAppIfNecessary(" in body
+               for path in (game_dir / "game").rglob("*.rpy*") if path.suffix in (".rpy", ".rpyc")
+               for body in _script_bodies(path))
+
+
 def harvest(game_dir: Path, scratch: Path, timeout: float = 600) -> dict:
+    if relaunches_through_steam(game_dir):
+        raise HarvestError(f"{game_dir.name} relaunches itself through Steam when started directly, "
+                           "so it can't be harvested from a copy as it is")
     copy = prepare(game_dir, scratch)
     out = scratch / f"{game_dir.name}.harvest.json"
-    out.unlink(missing_ok=True)
-    traceback = copy / "traceback.txt"
-    traceback.unlink(missing_ok=True)
+    error = out.with_name(out.name + ".error")  # written by harvest.rpy itself
+    traceback = copy / "traceback.txt"  # written by Ren'Py
+    for stale in (out, error, traceback):
+        stale.unlink(missing_ok=True)
 
     # RENPY_NO_STEAM is Ren'Py's own switch: without it, a harvest would sign
     # in to Steam as the game and count as playtime.
     env = dict(os.environ, WITCH_HARVEST_OUT=str(out), RENPY_NO_STEAM="1")
+    # The environment variable starts the harvest (see harvest.rpy), so no
+    # positional arguments are needed; launchers differ in which they add.
     # Ren'Py's .exe may hand off to the real engine process and return at
     # once, so completion is detected by the output file appearing.
-    subprocess.Popen([str(find_launcher(copy)), ".", "witch_harvest", "--savedir", str(scratch / "saves" / game_dir.name)],
+    launched = datetime.now()
+    subprocess.Popen([str(find_launcher(copy)), "--savedir", str(scratch / "saves" / game_dir.name)],
                      cwd=copy, env=env)
     deadline = time.monotonic() + timeout
+    polls = 0
     while time.monotonic() < deadline:
         if out.exists():
             return json.loads(out.read_text(encoding="utf-8"))
-        if traceback.exists():
-            time.sleep(0.5)  # let Ren'Py finish writing it
-            _close(copy)
-            raise HarvestError(f"Ren'Py failed while harvesting {game_dir.name}:\n"
-                               + traceback.read_text(encoding="utf-8", errors="replace"))
+        for report in (error, traceback):
+            if report.exists():
+                time.sleep(0.5)  # let it finish writing
+                _stop(copy)
+                raise HarvestError(f"Ren'Py failed while harvesting {game_dir.name}:\n"
+                                   + report.read_text(encoding="utf-8", errors="replace"))
+        # Some games, started outside Steam, ask Steam to relaunch the
+        # installed copy (SteamAPI_RestartAppIfNecessary) and exit. That copy
+        # is closed again at once; anything started before the harvest is
+        # left alone.
+        polls += 1
+        if polls % 8 == 0 and _stop(game_dir, since=launched):
+            _stop(copy)
+            raise HarvestError(f"{game_dir.name} asked Steam to relaunch it from its installed folder "
+                               "(closed again); it can't be harvested from a copy as it is")
         time.sleep(0.25)
     # A game can stop on its own error screen without writing a traceback.
-    _close(copy)
+    _stop(copy)
     raise HarvestError(f"no harvest from {game_dir.name} after {timeout:.0f} s; see {copy / 'log.txt'}")
 
 
-def _close(copy: Path) -> None:
-    """Ends every process running from the scratch copy, the only processes
-    a harvest starts."""
-    prefix = str(copy.resolve()).replace("'", "''")
-    subprocess.run(["powershell", "-NoProfile", "-Command",
-                    f"Get-CimInstance Win32_Process | Where-Object {{ $_.ExecutablePath -like '{prefix}\\*' }}"
-                    " | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"],
-                   check=False, capture_output=True)
+def _stop(folder: Path, since: datetime | None = None) -> bool:
+    """Ends the processes running from `folder` (started at or after `since`,
+    if given). True if there were any."""
+    prefix = str(folder.resolve()).replace("'", "''")
+    started = f" -and $_.CreationDate -ge [datetime]'{since:%Y-%m-%dT%H:%M:%S}'" if since else ""
+    result = subprocess.run(["powershell", "-NoProfile", "-Command",
+                             f"Get-CimInstance Win32_Process | Where-Object {{ $_.ExecutablePath -like '{prefix}\\*'"
+                             f"{started} }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force; $_.ProcessId }}"],
+                            check=False, capture_output=True, text=True)
+    return bool(result.stdout.strip())
