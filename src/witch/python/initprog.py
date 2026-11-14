@@ -193,6 +193,7 @@ def program(harvest: dict) -> dict:
             "renpy_modules": harvest["renpy_modules"], "style_tables": harvest.get("style_tables"),
             "modules": modules, "early": early, "init": init, "rpym": rpym,
             "steps": dict((str(i), step) for i, step in steps.items()), "labels": labels,
+            "all_labels": sorted(harvest["labels"]),
             "platform": harvest["early"]["platform"], "atl_properties": harvest["early"]["atl_properties"],
             "files": [f for f in harvest["early"]["files"] if not _is_harvester({"file": f})],
             "common_files": [f for f in harvest["early"]["common_files"] if not _is_harvester({"file": f})]}

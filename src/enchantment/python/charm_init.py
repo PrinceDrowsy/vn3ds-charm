@@ -308,6 +308,7 @@ def main(program_path, result_path):
 
     for flag, value in program["platform"].items():
         setattr(renpy, flag, tuple(value) if isinstance(value, list) else value)
+    _charm.labels = set(program["all_labels"])
     _charm.files = program["files"]
     _charm.common_files = program["common_files"]
     if program["style_tables"] is not None:

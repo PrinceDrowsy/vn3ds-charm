@@ -4,6 +4,7 @@ kind, which is all a Character is until it speaks. Speaking is native
 (REWORK-PLAN §8.2)."""
 import collections
 
+import _charm
 import renpy
 from renpy import missing_attribute
 
@@ -110,6 +111,18 @@ class ADVCharacter(object):
         self.what_args.update(self.properties.pop("what"))
         self.window_args.update(self.properties.pop("window"))
         self.who_args.update(self.properties.pop("who"))
+
+
+def show_display_say(who, what, who_args={}, what_args={}, window_args={}, **kwargs):
+    """A Character's default show_function: the say window, which the engine
+    shows (§8.2)."""
+    return _charm.engine("show_display_say", who, what, who_args=who_args, what_args=what_args,
+                         window_args=window_args, **kwargs)
+
+
+def predict_show_display_say(who, what, who_args, what_args, window_args, **kwargs):
+    # The engine predicts from the node graph (§11).
+    return []
 
 
 def Character(name=NotSet, kind=None, **properties):

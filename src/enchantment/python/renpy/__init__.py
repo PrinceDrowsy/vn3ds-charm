@@ -8,6 +8,9 @@ import sys
 
 from renpy import missing
 
+# Ren'Py's per-run dictionary (renpy.session), kept until the game quits.
+session = {}
+
 
 def submodule_or_missing(package, name):
     """For a package's __getattr__: a real submodule if the shim has one, else

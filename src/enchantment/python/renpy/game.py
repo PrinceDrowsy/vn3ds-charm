@@ -4,6 +4,7 @@ from renpy import missing_attribute
 
 persistent = None
 preferences = None
+post_init = []  # functions run once init is over
 less_updates = False  # Ren'Py's --less-updates, for screen readers
 
 

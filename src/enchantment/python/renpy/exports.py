@@ -76,6 +76,55 @@ class Container(renpy.display.core.Displayable, renpy.python.RevertableObject):
     _list_type = renpy.python.RevertableList
 
 
+def has_label(name):
+    return _charm.has_label(name)
+
+
+def write_log(s, *args):
+    _charm.write_log(s % args if args else s)
+
+
+def fsencode(s):
+    return s
+
+
+# What the engine does when the game runs. Game code binds these during
+# init (keymaps, config callbacks); calling one is an interaction, which
+# can't happen at convert time.
+
+def display_menu(items, **kwargs):
+    return _charm.engine("display_menu", items, **kwargs)
+
+
+def predict_menu():
+    return []
+
+
+def rollback(force=False, checkpoints=1, defer=False, greedy=True, label=None, abnormal=True, current_label=None):
+    return _charm.engine("rollback", force=force, checkpoints=checkpoints, defer=defer, greedy=greedy, label=label,
+                         abnormal=abnormal, current_label=current_label)
+
+
+def toggle_fullscreen():
+    return _charm.engine("toggle_fullscreen")
+
+
+def quit_event():
+    return _charm.engine("quit_event")
+
+
+def iconify():
+    return _charm.engine("iconify")
+
+
+def call_in_new_context(label, *args, **kwargs):
+    return _charm.engine("call_in_new_context", label, *args, **kwargs)
+
+
+def invoke_in_new_context(callable, *args, **kwargs):
+    return _charm.engine("invoke_in_new_context", callable, *args, **kwargs)
+
+
 def list_files(common=False):
     return _charm.list_files(common)
 
@@ -97,13 +146,27 @@ _IMPORTED = {
     "register_persistent": ("renpy.persistent", "register_persistent"),
     "eval": ("renpy.python", "py_eval"),
     "random": ("renpy.python", "rng"),
+    "Keymap": ("renpy.display.behavior", "Keymap"),
+    "show_display_say": ("renpy.character", "show_display_say"),
+    "predict_show_display_say": ("renpy.character", "predict_show_display_say"),
+    "register_sl_statement": ("renpy.sl2.slparser", "CustomParser"),
+    "register_sl_displayable": ("renpy.sl2.slparser", "register_sl_displayable"),
     "get_available_image_tags": ("renpy.display.image", "get_available_image_tags"),
     "music": ("renpy.audio.music", None),
     "sound": ("renpy.audio.sound", None),
 }
 
 
+# Curried forms, made when first used: renpy.curry loads from the game's
+# source after this module.
+_CURRIED = {"curried_call_in_new_context": call_in_new_context,
+            "curried_invoke_in_new_context": invoke_in_new_context}
+
+
 def __getattr__(name):
+    if name in _CURRIED:
+        value = globals()[name] = renpy.curry.curry(_CURRIED[name])
+        return value
     if name in _IMPORTED:
         module, attr = _IMPORTED[name]
         __import__(module)
