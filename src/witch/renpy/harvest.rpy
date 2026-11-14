@@ -260,6 +260,23 @@ init 999999 python:
         # Init order exactly as Ren'Py runs it: (priority, first node).
         initcode = [[item[0], index.get(id(item[-1]))] for item in script.initcode]
 
+        # Ren'Py's own Python modules that the shim runs as they are: the
+        # names every store starts with (minstore) and the main store's
+        # (defaultstore). As source on Python 3, as a tree on Python 2.
+        modules = {}
+        renpy_dir = os.path.dirname(renpy.__file__)
+        for module in ("minstore", "defaultstore"):
+            module_path = os.path.join(renpy_dir, module + ".py")
+            if not os.path.exists(module_path):
+                modules["renpy." + module] = {"error": "the game ships no source for it"}
+                continue
+            with open(module_path, "rb") as source_file:
+                module_source = source_file.read().decode("utf-8")
+            if py2:
+                modules["renpy." + module] = {"ast": dump_ast(ast.parse(module_source).body)}
+            else:
+                modules["renpy." + module] = {"source": module_source}
+
         # The store after init, the oracle for Witch's own init (REWORK-PLAN
         # §6.1). Containers and objects get an id when first written and are
         # a {"ref": id} after, so shared and cyclic values are kept; dicts
@@ -361,7 +378,8 @@ init 999999 python:
                 python["old_flags"] = future_names(old_flags)
             file_flags = getattr(renpy.python, "file_compiler_flags", {})
             python["file_flags"] = dict((k, future_names(v)) for k, v in file_flags.items() if v)
-            f.write('"python": %s,\n"initcode": %s,\n"config": ' % (json.dumps(python), json.dumps(initcode)))
+            f.write('"python": %s,\n"initcode": %s,\n"modules": %s,\n"config": '
+                    % (json.dumps(python), json.dumps(initcode), json.dumps(modules)))
             json.dump(dict((k, val(v)) for k, v in sorted(vars(renpy.config).items()) if own(k)), f)
             f.write(',\n"store": {')
             for i, (store_name, store) in enumerate(sorted(renpy.python.store_dicts.items())):

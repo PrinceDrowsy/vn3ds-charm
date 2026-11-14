@@ -81,9 +81,22 @@ The first phases of `docs/REWORK-PLAN.md`: the bundle format and verifier
   through the Bash tool turned `\\n` into newlines or failed on quotes.
   *Prevention:* write code and notes with the Write/Edit tools, never through
   shell heredocs.
+- **A `sed` by line number after an insertion overwrote the wrong line.**
+  (R2.3) An Edit inserted 17 lines above the target, then `sed '364s/…/'`
+  replaced an unrelated `if i:`, with its `\n` escapes turned into newlines
+  too. Caught by reading the diff; restored from git and redone with Edit.
+  *Prevention:* never address lines by number in a file just edited; match
+  on content with the Edit tool, and check `git diff` for unexpected `-` lines.
 - **Tests with their own bugs.** Twice a failing test was the test's fault (a
   hard-coded node index, a jump placed after another jump). Read the failure
   before changing the code under test.
+
+- **A catch-all `__getattr__` shadowed real submodules.** (R2.3) The shim's
+  package-level `__getattr__` answered `from renpy import py2` with a
+  placeholder, so the Python 2 helpers were silently never installed; it
+  showed up only because placeholders report every use. *Prevention:* a
+  catch-all must try the real thing first (import the submodule), and its
+  uses must be reported, never silent.
 
 ### What to do differently
 
