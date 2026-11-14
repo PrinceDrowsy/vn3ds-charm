@@ -21,6 +21,11 @@ def has_image(name):
     return name in images
 
 
+def playing(channel):
+    # Nothing plays while a game is converted.
+    return False
+
+
 def screen(name, node):
     screens[name] = node
 

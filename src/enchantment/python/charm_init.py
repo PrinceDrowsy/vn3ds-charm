@@ -389,6 +389,7 @@ def main(program_path, result_path):
                        "strings": _charm.strings,
                        "styles": [[list(name), dumper.value(style)] for name, style in renpy.style.styles.items()],
                        "deferred_styles": renpy.translation.deferred_styles,
+                       "channels": dict((name, dumper.value(c)) for name, c in renpy.audio.audio.channels.items()),
                    }}, f)
 
 

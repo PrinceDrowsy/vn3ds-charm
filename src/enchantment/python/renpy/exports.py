@@ -77,4 +77,7 @@ class Container(renpy.display.core.Displayable, renpy.python.RevertableObject):
 def __getattr__(name):
     if name == "ParameterizedText":
         return renpy.text.extras.ParameterizedText
+    if name in ("music", "sound"):
+        __import__("renpy.audio." + name)
+        return getattr(renpy.audio, name)
     return submodule_or_missing("renpy", name)
