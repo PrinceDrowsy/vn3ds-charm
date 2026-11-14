@@ -36,3 +36,34 @@
   unless they were designed for semi-trusted archives. Rebuild converter-facing
   asset pipelines in Python with safe-path confinement and argument-list
   subprocess calls.
+
+## Rework R0 → R2.2 (2026-11-13 / 14)
+
+- **SKILL-006: Generate the C header from the Python schema.** One declaration
+  (`schema.py`) drives Witch's writer and reader and Enchantment's header,
+  with `_Static_assert` on every size and offset, compiled under desktop gcc
+  and devkitARM in a test. Drift between the sides is a compile error.
+- **SKILL-007: Harvest from inside the original engine.** Copy the game to
+  scratch (hard-link read-only media), install one script that runs at the
+  very end of init when an environment variable is set, write the result
+  under a temporary name and rename it, then `os._exit`. Works on every
+  Ren'Py from 6.15 to 8.5 without depending on launch arguments.
+- **SKILL-008: Ask the engine for its own transforms.** Where the original
+  engine transforms code before running it (Ren'Py's `py_compile`), call that
+  and record the output: `ast.unparse` on Python 3, the tree as JSON on
+  Python 2. Don't reimplement version-specific engine logic the engine can
+  be asked for.
+- **SKILL-009: Stand-in DLLs without a compiler.** A DLL that only has to
+  export names returning 0 can be written directly as a PE image (one
+  section, one `xor eax, eax; ret`, the export names read from the real DLL),
+  for x86 and x64. Used to keep Steam out of harvests.
+- **SKILL-010: Diagnose a stuck process from inside it.** A probe that starts a
+  thread at the earliest init and dumps every thread's stack after a delay;
+  if it never writes, the process exited or blocked in C, so check the exit
+  code next. Never screenshots.
+- **SKILL-011: Inherited vs introduced.** Give the verifier what the original
+  engine itself loaded (`Source`: labels, image tags). A fault the original
+  has too is reported but doesn't gate the build.
+- **SKILL-012: Spike on the real target early,** with go/no-go numbers set in
+  advance, and keep the spike's code (`spikes/hardware/`) so the numbers can
+  be reproduced.
