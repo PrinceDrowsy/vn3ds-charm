@@ -19,6 +19,8 @@ import zlib
 from datetime import datetime
 from pathlib import Path
 
+from .steamstub import export_names, stub_dll
+
 HARVEST_RPY = Path(__file__).with_name("harvest.rpy")
 INSTALLED_NAME = "zzz_witch_harvest.rpy"
 
@@ -96,11 +98,20 @@ def relaunches_through_steam(game_dir: Path) -> bool:
                for body in _script_bodies(path))
 
 
+def _stand_in_for_steam(game_dir: Path, copy: Path) -> None:
+    """Replaces the copy's steam_api DLLs with stand-ins (steamstub.py),
+    built from the export lists of the installed game's own DLLs."""
+    for real in game_dir.rglob("steam_api*.dll"):
+        target = copy / real.relative_to(game_dir)
+        machine, names = export_names(real.read_bytes())
+        target.unlink(missing_ok=True)  # never write through a link to the installed file
+        target.write_bytes(stub_dll(machine, names, real.name))
+
+
 def harvest(game_dir: Path, scratch: Path, timeout: float = 600) -> dict:
-    if relaunches_through_steam(game_dir):
-        raise HarvestError(f"{game_dir.name} relaunches itself through Steam when started directly, "
-                           "so it can't be harvested from a copy as it is")
     copy = prepare(game_dir, scratch)
+    if relaunches_through_steam(game_dir):
+        _stand_in_for_steam(game_dir, copy)
     out = scratch / f"{game_dir.name}.harvest.json"
     error = out.with_name(out.name + ".error")  # written by harvest.rpy itself
     traceback = copy / "traceback.txt"  # written by Ren'Py
