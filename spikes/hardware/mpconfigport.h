@@ -27,3 +27,15 @@
 #define MICROPY_PY_BUILTINS_EXECFILE            (0)
 #define MICROPY_PY_IO                           (0)
 #define MICROPY_PY_UCTYPES                      (0)
+
+// Native ARM code from `mpy-cross -march=armv6 -X emit=native`. The GC heap
+// isn't executable on the 3DS, so the runner places native code on its own
+// pages and marks them executable when MicroPython commits them.
+#define MICROPY_EMIT_ARM                        (1)
+#include <stddef.h>
+void charm_alloc_exec(size_t min_size, void **ptr, size_t *size);
+void *charm_commit_exec(void *fun_data, size_t len, void *reloc);
+#define MP_PLAT_ALLOC_EXEC(min_size, ptr, size) charm_alloc_exec(min_size, (void **)(ptr), size)
+#define MP_PLAT_FREE_EXEC(ptr, size)            ((void)(ptr), (void)(size))
+#define MP_PLAT_COMMIT_EXEC(fun_data, len, reloc) charm_commit_exec(fun_data, len, reloc)
+#define MP_STATE_PORT                           MP_STATE_VM

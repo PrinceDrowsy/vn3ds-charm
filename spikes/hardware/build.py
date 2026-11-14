@@ -52,12 +52,22 @@ def embed_package() -> None:
     run([MSYS2 / "usr" / "bin" / "bash.exe", "-c", script], env=msys_env())
 
 
-def bench_header() -> None:
-    mpy = BUILD / "bench.mpy"
-    run([MICROPYTHON / "mpy-cross" / "build" / "mpy-cross.exe", "-o", mpy, HERE / "bench.py"])
-    data = mpy.read_bytes()
-    rows = ",\n".join(", ".join(str(b) for b in data[i:i + 24]) for i in range(0, len(data), 24))
-    (BUILD / "bench_mpy.h").write_text(f"static const unsigned char bench_mpy[] = {{\n{rows}\n}};\n")
+MPY_BLOBS = (
+    ("bench_mpy", "bench.py", []),
+    ("frames_bc_mpy", "frames.py", []),
+    ("frames_native_mpy", "frames.py", ["-march=armv6", "-X", "emit=native"]),
+)
+
+
+def mpy_header() -> None:
+    out = []
+    for name, src, flags in MPY_BLOBS:
+        mpy = BUILD / f"{name}.mpy"
+        run([MICROPYTHON / "mpy-cross" / "build" / "mpy-cross.exe", *flags, "-o", mpy, HERE / src])
+        data = mpy.read_bytes()
+        rows = ",\n".join(", ".join(str(b) for b in data[i:i + 24]) for i in range(0, len(data), 24))
+        out.append(f"static const unsigned char {name}[] = {{\n{rows}\n}};\n")
+    (BUILD / "mpy_blobs.h").write_text("".join(out))
 
 
 def sources() -> list[Path]:
@@ -104,7 +114,7 @@ def nintendo_3ds() -> Path:
 def main() -> None:
     BUILD.mkdir(exist_ok=True)
     embed_package()
-    bench_header()
+    mpy_header()
     print("desktop:", desktop())
     print("3ds:", nintendo_3ds())
 

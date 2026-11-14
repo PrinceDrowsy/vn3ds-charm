@@ -5,14 +5,12 @@
 # 250-entry history and a rollback snapshot per interaction. Real game code
 # needs the renpy shim (R2); R2's conformance suite reruns this with it.
 import gc
-import math
 
 from charm import ticks_us
 
 _setup_start = ticks_us()
 
 INTERACTION_MS = 50.0
-FRAME_MS = 2.0
 HEAP_MB = 12.0
 ROLLBACK_LENGTH = 128  # Ren'Py's config.rollback_length
 HISTORY_LENGTH = 250  # Ren'Py's config.history_length
@@ -263,49 +261,6 @@ def interaction(k):
     return len(choices) + target
 
 
-class Trans:
-    def __init__(self):
-        self.xpos = 0.5
-        self.ypos = 1.0
-        self.alpha = 1.0
-        self.zoom = 1.0
-
-
-def bob(trans, st, at):
-    trans.ypos = 1.0 + 0.01 * math.sin(st * 2.0)
-    trans.zoom = 1.0 + 0.005 * math.cos(st * 1.5)
-    return 0
-
-
-def clock_text(st, at):
-    return "Day %d, %02d:%02d" % (day, int(st) // 60 % 24, int(st) % 60), 0.1
-
-
-def bounce_glyphs(n, st):
-    # Mice Tea's kinetic BounceText moves each glyph on its own phase every frame.
-    return [int(4.0 * math.sin(st * 6.0 + i * 0.6)) for i in range(n)]
-
-
-def frame(f):
-    st = f / 60.0
-    for t in sprites:
-        bob(t, st, st)
-    clock_text(st, st)
-    bounce_glyphs(60, st)
-
-
-sprites = [Trans() for _ in range(3)]
-
-
-def timed(fn, count):
-    times = []
-    for k in range(count):
-        t0 = ticks_us()
-        fn(k)
-        times.append(ticks_us() - t0)
-    return times
-
-
 def main(setup_us):
     line("setup (build store)", setup_us / 1000.0, "ms")
 
@@ -332,15 +287,30 @@ def main(setup_us):
     line("rollback snapshot", len(rollback[-1]) / 1024.0, "KB")
 
     gc.collect()
-    gc.disable()
-    frames = timed(frame, 600)
-    gc.enable()
-    line("frame calls, mean", sum(frames) / len(frames) / 1000.0, "ms")
-    line("frame calls, worst", max(frames) / 1000.0, "ms", FRAME_MS)
-
-    gc.collect()
     line("heap in use", gc.mem_alloc() / 1048576.0, "MB", HEAP_MB)
     line("heap free", gc.mem_free() / 1048576.0, "MB")
 
 
-main(ticks_us() - _setup_start)
+def gc_only():
+    """GC cost alone, for comparing heap sizes: fill the rollback ring
+    without collecting, then time full collections."""
+    for k in range(ROLLBACK_LENGTH + 10):
+        interaction(k)
+    gc.collect()
+    worst = 0
+    for _ in range(5):
+        t0 = ticks_us()
+        gc.collect()
+        worst = max(worst, ticks_us() - t0)
+    size = (gc.mem_alloc() + gc.mem_free()) / 1048576.0
+    line("gc.collect @ %2d MB heap" % round(size), worst / 1000.0, "ms")
+
+
+try:
+    MODE
+except NameError:
+    MODE = "full"
+if MODE == "gc":
+    gc_only()
+else:
+    main(ticks_us() - _setup_start)

@@ -22,6 +22,12 @@ numbers only show the code works.
 ## Run on the console
 
 Copy `charm-spike-h.3dsx` to `sdmc:/3ds/` and start it from the Homebrew
-Launcher. It takes about a minute. Results are shown on the top screen and
-saved to `sdmc:/charm-spike-h.txt`; the 16 MB scratch file it writes for the
-SD test is deleted at the end. START exits.
+Launcher, or send it over Wi-Fi with `3dslink -a <console IP>` after pressing
+Y in the launcher. It takes about two minutes. Results are shown on the top
+screen and saved to `sdmc:/charm-spike-h.txt`; the 16 MB scratch file it
+writes for the SD test is deleted at the end.
+
+At the end, A tries the per-frame workload as native ARM code. That needs the
+kernel to make memory executable (svcControlProcessMemory), which Azahar
+doesn't implement and which can freeze a console that refuses it, so it runs
+only on request, after everything else is saved. START exits.
