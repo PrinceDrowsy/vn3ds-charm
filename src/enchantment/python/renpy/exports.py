@@ -1,6 +1,8 @@
 """renpy.exports, what game code calls `renpy`. Ren'Py also copies all of its
 own modules into it, so `renpy.display` works from game code; names the shim
 doesn't have resolve to submodules or placeholders."""
+import sys
+
 import _charm
 import renpy
 from renpy import submodule_or_missing
@@ -74,10 +76,35 @@ class Container(renpy.display.core.Displayable, renpy.python.RevertableObject):
     _list_type = renpy.python.RevertableList
 
 
+def list_files(common=False):
+    return _charm.list_files(common)
+
+
+def loadable(filename):
+    return _charm.loadable(filename)
+
+
+# Names Ren'Py's exports imports from its other modules, as (module, name
+# there, or None for the module itself). Looked up when used, since several
+# of those modules load from the game's source after this one.
+_IMPORTED = {
+    "ParameterizedText": ("renpy.text.extras", "ParameterizedText"),
+    "curry": ("renpy.curry", "curry"),
+    "partial": ("renpy.curry", "partial"),
+    "displayable": ("renpy.easy", "displayable"),
+    "split_properties": ("renpy.easy", "split_properties"),
+    "predict": ("renpy.easy", "predict"),
+    "register_persistent": ("renpy.persistent", "register_persistent"),
+    "eval": ("renpy.python", "py_eval"),
+    "music": ("renpy.audio.music", None),
+    "sound": ("renpy.audio.sound", None),
+}
+
+
 def __getattr__(name):
-    if name == "ParameterizedText":
-        return renpy.text.extras.ParameterizedText
-    if name in ("music", "sound"):
-        __import__("renpy.audio." + name)
-        return getattr(renpy.audio, name)
+    if name in _IMPORTED:
+        module, attr = _IMPORTED[name]
+        __import__(module)
+        module = sys.modules[module]
+        return module if attr is None else getattr(module, attr)
     return submodule_or_missing("renpy", name)

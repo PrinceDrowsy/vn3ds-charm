@@ -12,6 +12,10 @@ from renpy.revertable import (RevertableDict, RevertableList, RevertableObject, 
 store_dicts = {}
 
 
+class NoRollback(object):
+    """Marks objects rollback leaves alone; D19's snapshots honour it."""
+
+
 class StoreModule:
     """A module backed by a dict: the stores, and Ren'Py's own modules the
     shim runs from the game's source (minstore, defaultstore)."""

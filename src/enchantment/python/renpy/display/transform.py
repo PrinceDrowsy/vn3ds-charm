@@ -12,6 +12,11 @@ class ATLTransform:
         self.parameters = parameters  # the harvested signature, or None
         self.properties = properties
 
+    def _show(self):
+        # Ren'Py computes the transform's starting state here; that's the
+        # ATL VM's, when the transform is shown.
+        pass
+
 
 def __getattr__(name):
     return missing_attribute("renpy.display.transform", name)

@@ -52,6 +52,7 @@ def run(step):
             special.set(step["varname"], value)
         else:
             store[step["varname"]] = value
+        dump_definition(step)
     elif kind == "Default":
         special = renpy.config.special_namespaces.get(step["store"])
         if special is not None:
@@ -60,6 +61,7 @@ def run(step):
             # Evaluated when the game starts (or a save without it loads).
             create_store(step["store"])
             _charm.default(step["store"], step["varname"], step["node"])
+            dump_definition(step)
     elif kind == "Image":
         if "code" in step:
             image = eval(code(step, "code"), main)
@@ -69,8 +71,10 @@ def run(step):
     elif kind == "Transform":
         transform = renpy.display.transform.ATLTransform(step["node"], parameters=step["parameters"])
         create_store(step["store"])[step["varname"]] = transform
+        renpy.dump.transforms.append((step["varname"], step["file"], step["line"]))
     elif kind == "Screen":
         _charm.screen(step["name"], step["node"])
+        renpy.dump.screens.append((step["name"], step["file"], step["line"]))
     elif kind == "TranslateString":
         _charm.translate_string(step["language"], step["old"], step["new"])
     elif kind == "Style":
@@ -83,6 +87,11 @@ def run(step):
         pass
     else:
         missing.record("statement " + kind)
+
+
+def dump_definition(step):
+    name = step["varname"] if step["store"] == "store" else step["store"][6:] + "." + step["varname"]
+    renpy.dump.definitions.append((name, step["file"], step["line"]))
 
 
 def code(step, field):
@@ -240,6 +249,10 @@ def startup(load_rpym, rpym):
     self-reference and style manager, then the error-handling module and
     the system styles it sets up."""
     renpy.config.variants = ["large", "pc", None]
+    # Where the game's files are, as the engine names them in the bundle.
+    renpy.config.basedir = renpy.config.renpy_base = "/"
+    renpy.config.gamedir = "/game"
+    renpy.config.commondir = "/renpy/common"
     store = store_dicts["store"]
     store["store"] = sys.modules["store"]
     store["style"] = renpy.style.StyleManager()
@@ -284,6 +297,10 @@ def main(program_path, result_path):
                            "error": "%s: %s" % (type(e).__name__, e), "trace": traceback_text(e)})
             return False
 
+    for flag, value in program["platform"].items():
+        setattr(renpy, flag, tuple(value) if isinstance(value, list) else value)
+    _charm.files = program["files"]
+    _charm.common_files = program["common_files"]
     if program["style_tables"] is not None:
         stylesets.load(program["style_tables"])
     attempt(("renpy modules", 0), stand_in_modules, program["renpy_modules"])

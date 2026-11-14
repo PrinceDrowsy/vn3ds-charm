@@ -410,6 +410,14 @@ init 999999 python:
                                   if isinstance(cls, type) and issubclass(cls, renpy.ast.Node)
                                   and getattr(cls, "early_execute", None) is not None),
                 "config": sorted(getattr(renpy.ast, "EARLY_CONFIG", ())),
+                # The platform the game ran on, which its code tests
+                # (renpy.windows is a version tuple there), and the files
+                # renpy.list_files and renpy.loadable report.
+                "platform": dict((flag, getattr(renpy, flag)) for flag in
+                                 ("windows", "macintosh", "linux", "android", "ios", "emscripten", "mobile")
+                                 if hasattr(renpy, flag)),
+                "files": renpy.exports.list_files(),
+                "common_files": renpy.exports.list_files(True),
             }
             f.write('"python": %s,\n"initcode": %s,\n"modules": %s,\n"renpy_modules": %s,\n"style_tables": %s,\n'
                     '"early": %s,\n"config": ' % (json.dumps(python), json.dumps(initcode), json.dumps(modules),
