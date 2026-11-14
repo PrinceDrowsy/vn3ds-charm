@@ -54,5 +54,16 @@ class Frame(renpy.display.core.Displayable):
         self.bottom = bottom
 
 
+class FileCurrentScreenshot(renpy.display.core.Displayable):
+    """The save screen's thumbnail of the current screen, which the engine
+    captures (REWORK-PLAN §8.9)."""
+
+    def __init__(self, empty=None, **properties):
+        super(FileCurrentScreenshot, self).__init__(**properties)
+        if empty is None:
+            empty = renpy.display.layout.Null()
+        self.empty = empty
+
+
 def __getattr__(name):
     return missing_attribute("renpy.display.imagelike", name)
