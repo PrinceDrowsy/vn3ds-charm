@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 
 from . import py2
+from ..renpy import styles
 
 # Init-time statement classes and the fields whose code they run.
 _CODE_FIELDS = {
@@ -151,6 +152,17 @@ def _rpym_name(path: str) -> str | None:
     return stem
 
 
+def _style_tables(harvest: dict) -> dict | None:
+    """The tables the shim's styles resolve with, and the rules for each
+    property derived from the harvester's probes."""
+    tables = harvest.get("style_tables")
+    if tables is None:
+        return None
+    return {"all_properties": tables["all_properties"], "prefix_priority": tables["prefix_priority"],
+            "prefix_alts": tables["prefix_alts"], "property_priority": tables["property_priority"],
+            "rules": styles.rules(tables["probes"], tables["all_properties"])}
+
+
 def program(harvest: dict) -> dict:
     nodes = harvest["nodes"]
     # A .rpym module loads when init code calls renpy.load_module: its
@@ -190,10 +202,14 @@ def program(harvest: dict) -> dict:
             continue
         modules.append([name, {"statements": _statements(source)}])
     return {"py2": harvest["python"]["version"][0] == 2, "renpy_version": harvest["renpy_version"],
-            "renpy_modules": harvest["renpy_modules"], "style_tables": harvest.get("style_tables"),
+            "renpy_modules": harvest["renpy_modules"], "style_tables": _style_tables(harvest),
             "modules": modules, "early": early, "init": init, "rpym": rpym,
             "steps": dict((str(i), step) for i, step in steps.items()), "labels": labels,
             "all_labels": sorted(harvest["labels"]),
+            # Ren'Py keeps the screen size init ends with in persistent data
+            # and applies it before init on every later launch, so early
+            # code sizes itself to the game's screen; a player sees that.
+            "virtual_size": [harvest["config"]["screen_width"], harvest["config"]["screen_height"]],
             "platform": harvest["early"]["platform"], "atl_properties": harvest["early"]["atl_properties"],
             "files": [f for f in harvest["early"]["files"] if not _is_harvester({"file": f})],
             "common_files": [f for f in harvest["early"]["common_files"] if not _is_harvester({"file": f})]}
