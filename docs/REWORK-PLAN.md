@@ -1156,8 +1156,9 @@ The old pipeline is frozen (D22).
         (stepped slices on tuples and strings; `__new__` on built-in
         types). Next: `Character`, `Text`, transitions, `Transform`,
         audio channels, the `renpy.ui` widgets, then the standard
-        modules still missing (`tarfile`, `pygame_sdl2`, `pyobjus`). Style property *reads* are reported and give
-        None until resolution lands with R2.4d.
+        modules still missing (`tarfile`, `pygame_sdl2`, `pyobjus`).
+        Style property *reads* are reported and give None until
+        resolution lands with R2.4d.
       - **R2.4c Description classes** for what Jisei's init builds:
         images and `im.*`, `Frame`, `Solid`, `Null`, the box layouts
         `renpy.ui` uses, `Transform` and ATL transforms, the transition
