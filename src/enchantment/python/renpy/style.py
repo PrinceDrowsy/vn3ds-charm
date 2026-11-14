@@ -7,6 +7,7 @@ with the game's own property tables (renpy.styledata.stylesets); nothing
 here computes a property's final value.
 """
 import renpy
+from renpy import missing
 from renpy.styledata import stylesets
 
 styles = {}  # name tuple -> style
@@ -184,6 +185,14 @@ class StyleCore(object):
         if name not in stylesets.prefixed_all_properties:
             raise Exception("Style property {} is not known.".format(name))
         self.properties.append({name: value})
+
+    def __getattr__(self, name):
+        # Reading a property resolves the style, which lands with lowering
+        # (R2.4d); until then the read is reported, and gives None.
+        if name in stylesets.prefixed_all_properties:
+            missing.record("style property read: " + name)
+            return None
+        raise AttributeError(name)
 
     def __delattr__(self, name):
         self.delattr(name)

@@ -66,5 +66,15 @@ def not_const(name):
     pass
 
 
+class Displayable(renpy.display.core.Displayable, renpy.python.RevertableObject):
+    pass
+
+
+class Container(renpy.display.core.Displayable, renpy.python.RevertableObject):
+    _list_type = renpy.python.RevertableList
+
+
 def __getattr__(name):
+    if name == "ParameterizedText":
+        return renpy.text.extras.ParameterizedText
     return submodule_or_missing("renpy", name)

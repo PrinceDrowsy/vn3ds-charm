@@ -63,5 +63,14 @@ def py_eval(source, globals=None, locals=None):
     return store_eval(source, globals, locals)
 
 
+def py_compile(source, mode, filename='<none>', lineno=1, ast_node=False, cache=True):
+    # Code compiled at run time stays source; py_eval_bytecode evaluates it.
+    return source
+
+
+def py_eval_bytecode(bytecode, globals=None, locals=None):
+    return store_eval(bytecode, globals, locals)
+
+
 def __getattr__(name):
     return missing_attribute("renpy.python", name)
