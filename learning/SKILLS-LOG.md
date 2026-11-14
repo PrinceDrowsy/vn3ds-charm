@@ -116,6 +116,18 @@
   the real one with `:=` as the comprehension's first condition (`:=`
   binds in the enclosing scope). Not allowed in a class body or on a name
   an enclosing comprehension iterates; leave those unleaked.
+- **SKILL-019: Check stand-ins against the original interpreter, both
+  versions.** A Ren'Py 7 game ships its own Python 2.7 (`lib/windows-*/
+  python.exe`, standard library in `lib/pythonlib2.7`, run with
+  `PYTHONHOME`/`PYTHONPATH` set and `-O -S`). The `random` stand-in was
+  checked draw for draw against it and against CPython 3; Python 2 and 3
+  differ in how randint, choice and shuffle use the generator.
+- **SKILL-020: MicroPython is a smaller Python than it looks.** Beyond the
+  patched gaps: `str` lacked capitalize/title/ljust/rjust/zfill/isalnum/
+  removeprefix (patch 0007), `format()` and `math.hypot` were missing,
+  `random` had only getrandbits and seed, and lower()/upper() change ASCII
+  letters only. Measure a game's needs (corpus counts of each method and
+  module) before deciding between a C patch and a Python stand-in.
 - **SKILL-012: Spike on the real target early,** with go/no-go numbers set in
   advance, and keep the spike's code (`spikes/hardware/`) so the numbers can
   be reproduced.
