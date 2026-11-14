@@ -35,8 +35,8 @@ def harvest():
         node("Jump", {"target": {"expr": "\"ending\""}, "expression": True}, line=6),
         # 6
         node("Call", {"label": "helper", "expression": False, "arguments": {
-            "arguments": [[None, {"expr": "1"}], ["mood", {"expr": "\"sad\""}]], "extrapos": None,
-            "extrakw": None}}, next=7, line=7),
+            "call": [[None, "1"], ["mood", "\"sad\""], [None, "rest"]], "starred": [2], "doublestarred": []}},
+             next=7, line=7),
         # 7
         node("If", {"entries": [[{"expr": "seen"}, {"block": [8]}], [{"expr": "True"}, {"block": [9]}]]},
              line=8),
@@ -46,8 +46,8 @@ def harvest():
         # 9
         node("Scene", {"imspec": None, "layer": "master", "atl": None}, line=10),
         # 10
-        node("Label", {"block": {"block": [11]}, "parameters": {
-            "parameters": [["n", None], ["mood", {"expr": "\"ok\""}]], "extrapos": "args", "extrakw": None},
+        node("Label", {"block": {"block": [11]}, "parameters": {"signature": [
+            ["n", 1, None], ["mood", 1, "\"ok\""], ["args", 2, None], ["loud", 3, "False"]]},
             "hide": False}, next=11, name="helper", line=11),
         # 11
         node("Python", {"code": {"code": "x = 1", "mode": "hide"}, "hide": True, "store": "store"}, next=12,
@@ -129,9 +129,9 @@ def test_jumps_calls_and_parameters(bundle):
     assert bundle.code(jump.fields["target"]) == ('"ending"', "eval")
     call = bundle.node(6)
     assert call.fields["label"] == "helper"
-    assert bundle.code(call.fields["arguments"]) == ('1, mood="sad"', "arguments")
+    assert bundle.code(call.fields["arguments"]) == ('1, mood="sad", *rest', "arguments")
     helper = bundle.node(10)
-    assert bundle.code(helper.fields["parameters"]) == ('n, mood="ok", *args', "parameters")
+    assert bundle.code(helper.fields["parameters"]) == ('n, mood="ok", *args, loud=False', "parameters")
 
 
 def test_if_python_user_statement_translate(bundle):
@@ -171,3 +171,15 @@ def test_verifier_sees_the_graph_whole(bundle):
 ])
 def test_source_path(path, expected):
     assert source_path(path) == expected
+
+
+@pytest.mark.parametrize("signature, source", [
+    ([["a", 0, None], ["b", 1, None], ["c", 3, "1"]], "a, /, b, *, c=1"),
+    ([["a", 1, None], ["args", 2, None], ["k", 3, None], ["kw", 4, None]], "a, *args, k, **kw"),
+    ([], ""),
+])
+def test_signature_markers(signature, source):
+    h = {"nodes": [node("Transform", {"varname": "t", "atl": None, "parameters": {"signature": signature}})],
+         "labels": {}, "images": {}}
+    b = Bundle(build(h).write())
+    assert b.code(b.node(0).fields["parameters"]) == (source, "parameters")

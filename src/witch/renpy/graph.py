@@ -8,6 +8,9 @@ from __future__ import annotations
 from ..bundle.schema import NONE
 from ..bundle.writer import Writer
 
+# Parameter kinds in a harvested signature, numbered as Python's inspect does.
+POSITIONAL_ONLY, POSITIONAL_OR_KEYWORD, VAR_POSITIONAL, KEYWORD_ONLY, VAR_KEYWORD = range(5)
+
 
 def _text(value):
     """A harvested expression or plain string, as source text."""
@@ -49,23 +52,36 @@ class _Graph:
         return self.w.code(_text(value), mode)
 
     def parameters(self, info) -> int:
+        """A harvested signature as Python source, with `/` and `*` markers
+        where positional-only and keyword-only parameters need them."""
         if info is None:
             return NONE
-        parts = [name if default is None else f"{name}={_text(default)}" for name, default in info["parameters"]]
-        if info.get("extrapos"):
-            parts.append("*" + info["extrapos"])
-        if info.get("extrakw"):
-            parts.append("**" + info["extrakw"])
+        parts = []
+        kinds = [kind for _, kind, _ in info["signature"]]
+        for name, kind, default in info["signature"]:
+            if kind == KEYWORD_ONLY and VAR_POSITIONAL not in kinds and "*" not in parts:
+                parts.append("*")
+            if kind == VAR_POSITIONAL:
+                parts.append("*" + name)
+            elif kind == VAR_KEYWORD:
+                parts.append("**" + name)
+            else:
+                parts.append(name if default is None else f"{name}={default}")
+        if POSITIONAL_ONLY in kinds:
+            parts.insert(max(i for i, k in enumerate(kinds) if k == POSITIONAL_ONLY) + 1, "/")
         return self.w.code(", ".join(parts), "parameters")
 
     def arguments(self, info) -> int:
         if info is None:
             return NONE
-        parts = [_text(expr) if name is None else f"{name}={_text(expr)}" for name, expr in info["arguments"]]
-        if info.get("extrapos"):
-            parts.append("*" + _text(info["extrapos"]))
-        if info.get("extrakw"):
-            parts.append("**" + _text(info["extrakw"]))
+        parts = []
+        for i, (name, source) in enumerate(info["call"]):
+            if i in info["starred"]:
+                parts.append("*" + source)
+            elif i in info["doublestarred"]:
+                parts.append("**" + source)
+            else:
+                parts.append(source if name is None else f"{name}={source}")
         return self.w.code(", ".join(parts), "arguments")
 
     def imspec(self, spec, layer=None) -> dict:

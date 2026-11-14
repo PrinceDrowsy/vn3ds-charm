@@ -28,6 +28,41 @@ init 999 python:
         index = dict((id(n), i) for i, n in enumerate(nodes))
         unknown_refs = []
 
+        def text(value):
+            return None if value is None else value + ""
+
+        # Parameter kinds, as Python's inspect and Ren'Py 8 number them.
+        POSITIONAL_OR_KEYWORD, VAR_POSITIONAL, VAR_KEYWORD = 1, 2, 4
+
+        def signature(info):
+            """A label/transform/screen signature as [name, kind, default
+            source or None]: Ren'Py 8's Parameter objects, or Ren'Py 6/7's
+            (name, default) pairs plus extrapos/extrakw."""
+            params = info.parameters
+            if hasattr(params, "values"):
+                return {"signature": [[p.name, p.kind, text(p.default)] for p in params.values()]}
+            out = [[name, POSITIONAL_OR_KEYWORD, text(default)] for name, default in params]
+            if getattr(info, "extrapos", None):
+                out.append([info.extrapos, VAR_POSITIONAL, None])
+            if getattr(info, "extrakw", None):
+                out.append([info.extrakw, VAR_KEYWORD, None])
+            return {"signature": out}
+
+        def call(info):
+            """A call's arguments as [name or None, source], with the indexes
+            of * and ** arguments: Ren'Py 8 keeps any number of them in
+            place, Ren'Py 6/7 at most one of each, at the end."""
+            args = [[name, text(expr)] for name, expr in info.arguments]
+            starred = set(getattr(info, "starred_indexes", None) or ())
+            doublestarred = set(getattr(info, "doublestarred_indexes", None) or ())
+            if getattr(info, "extrapos", None):
+                starred.add(len(args))
+                args.append([None, text(info.extrapos)])
+            if getattr(info, "extrakw", None):
+                doublestarred.add(len(args))
+                args.append([None, text(info.extrakw)])
+            return {"call": args, "starred": sorted(starred), "doublestarred": sorted(doublestarred)}
+
         def node_name(name):
             if isinstance(name, tuple):
                 return "|".join(str(part) for part in name)
@@ -58,13 +93,9 @@ init 999 python:
             if isinstance(value, builtins.dict):
                 return {"dict": [[enc(k, depth + 1), enc(v, depth + 1)] for k, v in value.items()]}
             if isinstance(value, renpy.ast.ParameterInfo):
-                return {"parameters": enc(value.parameters, depth + 1),
-                        "extrapos": getattr(value, "extrapos", None),
-                        "extrakw": getattr(value, "extrakw", None)}
+                return signature(value)
             if isinstance(value, renpy.ast.ArgumentInfo):
-                return {"arguments": enc(value.arguments, depth + 1),
-                        "extrapos": getattr(value, "extrapos", None),
-                        "extrakw": getattr(value, "extrakw", None)}
+                return call(value)
             out = {"object": type(value).__name__}
             name = getattr(value, "name", None)
             if isinstance(name, text_types):
@@ -109,7 +140,7 @@ init 999 python:
 
         named = set(id(n) for n in script.namemap.values())
         out = {
-            "harvest_version": 1,
+            "harvest_version": 2,
             "renpy_version": renpy.version(),
             "screen_size": [config.screen_width, config.screen_height],
             "nodes": out_nodes,
