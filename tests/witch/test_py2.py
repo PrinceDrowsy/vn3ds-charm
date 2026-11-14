@@ -134,3 +134,22 @@ def test_literals_names_slices_and_calls():
 def test_unknown_node_is_reported():
     with pytest.raises(ConversionError, match="Backquote"):
         to_source({"_": "Backquote"}, "eval")
+
+
+def test_future_imports_drop_and_renamed_modules_keep_their_names():
+    tree = [
+        {"_": "ImportFrom", "module": "__future__", "names": [{"name": "print_function", "asname": None}],
+         "level": 0},
+        {"_": "Import", "names": [{"name": "__builtin__", "asname": None}, {"name": "os", "asname": None}]},
+        {"_": "ImportFrom", "module": "StringIO", "names": [{"name": "StringIO", "asname": None}], "level": 0},
+    ]
+    assert to_source(tree, "exec").splitlines() == ["import builtins as __builtin__, os", "from io import StringIO"]
+
+
+def test_dict_methods_go_through_the_py2_helper_and_object_new_drops_extras():
+    iteritems = call({"_": "Attribute", "value": name("d"), "attr": "iteritems", "ctx": L})
+    has_key = call({"_": "Attribute", "value": name("d"), "attr": "has_key", "ctx": L}, string("k"))
+    assert to_source(iteritems, "eval") == "__py2_method__(d, 'iteritems')"
+    assert to_source(has_key, "eval") == "__py2_method__(d, 'has_key', 'k')"
+    new = call({"_": "Attribute", "value": name("object"), "attr": "__new__", "ctx": L}, name("cls"), name("n"))
+    assert to_source(new, "eval") == "object.__new__(cls)"

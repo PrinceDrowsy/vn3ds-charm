@@ -20,6 +20,9 @@ import ast
 PY2_DIV = "__py2_div__"  # a / b
 PY2_DIV_ATTR = "__py2_div_attr__"  # obj.name /= b  ->  helper(obj, "name", b)
 PY2_DIV_ITEM = "__py2_div_item__"  # obj[key] /= b  ->  helper(obj, key, b)
+PY2_METHOD = "__py2_method__"  # obj.iteritems()  ->  helper(obj, "iteritems")
+
+_PY2_DICT_METHODS = {"iteritems", "iterkeys", "itervalues", "has_key"}
 
 _SIMPLE = {
     # Operators and contexts carry no fields and keep their names, except
@@ -32,6 +35,15 @@ _SIMPLE = {
     "Not": ast.Not, "UAdd": ast.UAdd, "USub": ast.USub, "Eq": ast.Eq, "NotEq": ast.NotEq, "Lt": ast.Lt,
     "LtE": ast.LtE, "Gt": ast.Gt, "GtE": ast.GtE, "Is": ast.Is, "IsNot": ast.IsNot, "In": ast.In,
     "NotIn": ast.NotIn,
+}
+
+
+# Standard modules Python 3 renamed (as 2to3's `imports` fixer does).
+_RENAMED_MODULES = {
+    "__builtin__": "builtins", "cPickle": "pickle", "cStringIO": "io", "StringIO": "io", "Queue": "queue",
+    "ConfigParser": "configparser", "urlparse": "urllib.parse", "urllib2": "urllib.request", "copy_reg": "copyreg",
+    "repr": "reprlib", "httplib": "http.client", "HTMLParser": "html.parser", "htmlentitydefs": "html.entities",
+    "thread": "_thread", "SocketServer": "socketserver",
 }
 
 
@@ -212,11 +224,20 @@ class _Converter:
         return ast.Assert(test=self.expr(n["test"]), msg=self.expr(n["msg"]))
 
     def stmt_Import(self, n):
-        return ast.Import(names=[ast.alias(name=a["name"], asname=a["asname"]) for a in n["names"]])
+        names = []
+        for a in n["names"]:
+            new = _RENAMED_MODULES.get(a["name"])
+            # Keep the Python 2 name bound, so the code that uses it still works.
+            names.append(ast.alias(name=new, asname=a["asname"] or a["name"]) if new
+                         else ast.alias(name=a["name"], asname=a["asname"]))
+        return ast.Import(names=names)
 
     def stmt_ImportFrom(self, n):
-        return ast.ImportFrom(module=n["module"], names=[ast.alias(name=a["name"], asname=a["asname"])
-                                                         for a in n["names"]], level=n["level"] or 0)
+        if n["module"] == "__future__":
+            return []  # already applied by the conversion
+        module = _RENAMED_MODULES.get(n["module"], n["module"])
+        return ast.ImportFrom(module=module, names=[ast.alias(name=a["name"], asname=a["asname"])
+                                                    for a in n["names"]], level=n["level"] or 0)
 
     def stmt_Exec(self, n):
         args = [self.expr(n["body"])]
@@ -314,6 +335,16 @@ class _Converter:
                            comparators=self.exprs(n["comparators"]))
 
     def expr_Call(self, n):
+        func = n["func"]
+        if func["_"] == "Attribute" and func["attr"] in _PY2_DICT_METHODS:
+            # The object's own method if it has one, else Python 2's dict
+            # behaviour: Ren'Py's own modules call these on plain dicts.
+            return _call(PY2_METHOD, self.expr(func["value"]), ast.Constant(func["attr"]), *self.exprs(n["args"]))
+        if (func["_"] == "Attribute" and func["attr"] == "__new__" and func["value"].get("_") == "Name"
+                and func["value"]["id"] == "object" and len(n["args"]) > 1):
+            # Python 2's object.__new__ ignores extra arguments when the class
+            # has its own __init__; Python 3's refuses them.
+            return ast.Call(func=self.expr(func), args=[self.expr(n["args"][0])], keywords=[])
         args = self.exprs(n["args"])
         keywords = [ast.keyword(arg=k["arg"], value=self.expr(k["value"])) for k in n["keywords"]]
         if n.get("starargs") is not None:
