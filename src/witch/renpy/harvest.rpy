@@ -389,9 +389,66 @@ init 999999 python:
                 python["old_flags"] = future_names(old_flags)
             file_flags = getattr(renpy.python, "file_compiler_flags", {})
             python["file_flags"] = dict((k, future_names(v)) for k, v in file_flags.items() if v)
+            def style_probes(all_properties):
+                """What each style property does with a value, which Ren'Py's
+                generated code knows and no table says: each property set on
+                a fresh style with a few kinds of value, and what each
+                property it affects reads back. Witch derives the rules from
+                these (witch/renpy/styles.py)."""
+                def describe(v):
+                    if v is None or isinstance(v, (builtins.bool, builtins.int, builtins.float) + text_types):
+                        return v
+                    if isinstance(v, builtins.tuple):
+                        return {"tuple": [describe(i) for i in v]}
+                    if isinstance(v, builtins.list):
+                        return {"list": [describe(i) for i in v]}
+                    return {"object": qualified(type(v))}
+
+                probes = {}
+                for prop, targets in all_properties.items():
+                    results = {}
+                    inputs = (("float", 0.3125), ("tuple", builtins.tuple(0.0625 * (i + 1) for i in range(len(targets)))),
+                              ("none", None), ("left", "left"), ("color", "#ff0000"), ("image", "probe.png"),
+                              ("outlines", [(1, "#000")]), ("true", True))
+                    for kind, value in inputs:
+                        s = renpy.style.Style(None)
+                        try:
+                            s.setattr(prop, value)
+                            renpy.style.build_style(s)
+                            results[kind] = [describe(getattr(s, t)) for t in targets]
+                        except Exception as e:
+                            results[kind] = {"error": type(e).__name__}
+                    probes[prop] = results
+                return probes
+
+            def resolved_styles(all_properties):
+                """Every style's resolved value of every property Ren'Py
+                stores, for the states a widget is drawn in, where it isn't
+                None: what Witch's own resolution is checked against."""
+                targets = sorted(builtins.set(t for ts in all_properties.values() for t in ts))
+                # Ren'Py keeps a style's values from when it was first built
+                # until it rebuilds every style, right after init; styles
+                # built at startup would otherwise read stale.
+                renpy.style.build_styles()
+                out = []
+                for name, s in sorted(renpy.style.styles.items()):
+                    values = {}
+                    old_prefix = s.prefix
+                    for prefix in ("insensitive_", "idle_", "hover_", "selected_idle_", "selected_hover_"):
+                        # A style reads its properties for its current prefix.
+                        s.set_prefix(prefix)
+                        for t in targets:
+                            v = getattr(s, t, None)
+                            if v is not None:
+                                values[prefix + t] = val(v)
+                    s.set_prefix(old_prefix)
+                    out.append([builtins.list(name), values])
+                return out
+
             # The style property tables, which Ren'Py generates and compiles
             # in: which properties exist, what each sets, and the prefixes'
-            # priorities (REWORK-PLAN §6.3). Ren'Py before 6.18 has none.
+            # priorities (REWORK-PLAN §6.3), and the styles as init left them.
+            # Ren'Py before 6.18 has none.
             try:
                 import renpy.styledata.stylesets as stylesets
                 style_tables = {
@@ -399,6 +456,12 @@ init 999999 python:
                     "prefix_priority": builtins.dict(stylesets.prefix_priority),
                     "prefix_alts": builtins.dict((k, builtins.list(v)) for k, v in stylesets.prefix_alts.items()),
                     "property_priority": builtins.dict(stylesets.property_priority),
+                    "probes": style_probes(stylesets.all_properties),
+                    "resolved": resolved_styles(stylesets.all_properties),
+                    "styles": [{"name": builtins.list(name), "parent": state["parent"] and builtins.list(state["parent"]),
+                                "properties": [[[k, val(x)] for k, x in sorted(d.items())] for d in state["properties"]]}
+                               for name, state in ((n, s.__getstate__())
+                                                   for n, s in sorted(renpy.style.styles.items()))],
                 }
             except ImportError:
                 style_tables = None
