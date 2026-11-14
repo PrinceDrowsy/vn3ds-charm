@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 #define CHARM_VERSION_MAJOR 0
-#define CHARM_VERSION_MINOR 1
+#define CHARM_VERSION_MINOR 2
 #define CHARM_MAGIC 0x4d524843u
 #define CHARM_NONE 0xffffffffu
 #define CHARM_ALIGN 16
@@ -49,11 +49,31 @@ enum charm_node_kind {
     CHARM_NODE_KIND_END_TRANSLATE = 19,
     CHARM_NODE_KIND_SHOW_LAYER = 20,
     CHARM_NODE_KIND_CAMERA = 21,
+    CHARM_NODE_KIND_INIT = 22,
+    CHARM_NODE_KIND_EARLY_PYTHON = 23,
+    CHARM_NODE_KIND_DEFINE = 24,
+    CHARM_NODE_KIND_DEFAULT = 25,
+    CHARM_NODE_KIND_IMAGE = 26,
+    CHARM_NODE_KIND_TRANSFORM = 27,
+    CHARM_NODE_KIND_STYLE = 28,
+    CHARM_NODE_KIND_SCREEN = 29,
+    CHARM_NODE_KIND_TESTCASE = 30,
+    CHARM_NODE_KIND_TRANSLATE_STRING = 31,
+    CHARM_NODE_KIND_TRANSLATE_PYTHON = 32,
+    CHARM_NODE_KIND_TRANSLATE_BLOCK = 33,
 };
-#define CHARM_NODE_KIND_COUNT 22
+#define CHARM_NODE_KIND_COUNT 34
 #define CHARM_SAY_INTERACT (1u << 0)
+#define CHARM_SHOW_ATL (1u << 0)
+#define CHARM_SCENE_ATL (1u << 0)
 #define CHARM_PYTHON_HIDE (1u << 0)
-static const char *const charm_node_kind_names[] = {"unknown", "label", "say", "show", "scene", "hide", "with", "jump", "jump_expression", "call", "call_expression", "return", "menu", "if", "while", "python", "pass", "user_statement", "translate", "end_translate", "show_layer", "camera"};
+#define CHARM_SHOW_LAYER_ATL (1u << 0)
+#define CHARM_CAMERA_ATL (1u << 0)
+#define CHARM_EARLY_PYTHON_HIDE (1u << 0)
+#define CHARM_IMAGE_ATL (1u << 0)
+#define CHARM_TRANSFORM_ATL (1u << 0)
+#define CHARM_TRANSLATE_BLOCK_EARLY (1u << 0)
+static const char *const charm_node_kind_names[] = {"unknown", "label", "say", "show", "scene", "hide", "with", "jump", "jump_expression", "call", "call_expression", "return", "menu", "if", "while", "python", "pass", "user_statement", "translate", "end_translate", "show_layer", "camera", "init", "early_python", "define", "default", "image", "transform", "style", "screen", "testcase", "translate_string", "translate_python", "translate_block"};
 
 enum charm_disp_kind {
     CHARM_DISP_KIND_UNKNOWN = 0,
@@ -79,8 +99,10 @@ enum charm_asset_format {
 enum charm_code_mode {
     CHARM_CODE_MODE_EVAL = 0,
     CHARM_CODE_MODE_EXEC = 1,
+    CHARM_CODE_MODE_PARAMETERS = 2,
+    CHARM_CODE_MODE_ARGUMENTS = 3,
 };
-#define CHARM_CODE_MODE_COUNT 2
+#define CHARM_CODE_MODE_COUNT 4
 
 typedef struct {
     uint32_t magic;
@@ -245,6 +267,58 @@ typedef struct {
     charm_list at; /* of CODE */
 } charm_camera;
 typedef struct {
+    int32_t priority;
+    uint32_t block; /* NODE */
+} charm_init;
+typedef struct {
+    uint32_t code; /* CODE */
+    uint32_t store; /* STRS */
+} charm_early_python;
+typedef struct {
+    uint32_t store; /* STRS */
+    uint32_t varname; /* STRS */
+    uint32_t operator; /* STRS */
+    uint32_t index; /* CODE */
+    uint32_t code; /* CODE */
+} charm_define;
+typedef struct {
+    uint32_t store; /* STRS */
+    uint32_t varname; /* STRS */
+    uint32_t code; /* CODE */
+} charm_default;
+typedef struct {
+    charm_list name; /* of STRS */
+    uint32_t code; /* CODE */
+} charm_image;
+typedef struct {
+    uint32_t store; /* STRS */
+    uint32_t varname; /* STRS */
+    uint32_t parameters; /* CODE */
+} charm_transform;
+typedef struct {
+    uint32_t name; /* STRS */
+    uint32_t parent; /* STRS */
+} charm_style;
+typedef struct {
+    uint32_t name; /* STRS */
+} charm_screen;
+typedef struct {
+    uint32_t label; /* STRS */
+} charm_testcase;
+typedef struct {
+    uint32_t language; /* STRS */
+    uint32_t old; /* STRS */
+    uint32_t new; /* STRS */
+} charm_translate_string;
+typedef struct {
+    uint32_t language; /* STRS */
+    uint32_t code; /* CODE */
+} charm_translate_python;
+typedef struct {
+    uint32_t language; /* STRS */
+    uint32_t block; /* NODE */
+} charm_translate_block;
+typedef struct {
     uint32_t classname; /* STRS */
 } charm_disp_unknown;
 typedef struct {
@@ -381,6 +455,46 @@ _Static_assert(offsetof(charm_show_layer, at) == 4, "charm_show_layer.at");
 _Static_assert(sizeof(charm_camera) == 12, "charm_camera size");
 _Static_assert(offsetof(charm_camera, layer) == 0, "charm_camera.layer");
 _Static_assert(offsetof(charm_camera, at) == 4, "charm_camera.at");
+_Static_assert(sizeof(charm_init) == 8, "charm_init size");
+_Static_assert(offsetof(charm_init, priority) == 0, "charm_init.priority");
+_Static_assert(offsetof(charm_init, block) == 4, "charm_init.block");
+_Static_assert(sizeof(charm_early_python) == 8, "charm_early_python size");
+_Static_assert(offsetof(charm_early_python, code) == 0, "charm_early_python.code");
+_Static_assert(offsetof(charm_early_python, store) == 4, "charm_early_python.store");
+_Static_assert(sizeof(charm_define) == 20, "charm_define size");
+_Static_assert(offsetof(charm_define, store) == 0, "charm_define.store");
+_Static_assert(offsetof(charm_define, varname) == 4, "charm_define.varname");
+_Static_assert(offsetof(charm_define, operator) == 8, "charm_define.operator");
+_Static_assert(offsetof(charm_define, index) == 12, "charm_define.index");
+_Static_assert(offsetof(charm_define, code) == 16, "charm_define.code");
+_Static_assert(sizeof(charm_default) == 12, "charm_default size");
+_Static_assert(offsetof(charm_default, store) == 0, "charm_default.store");
+_Static_assert(offsetof(charm_default, varname) == 4, "charm_default.varname");
+_Static_assert(offsetof(charm_default, code) == 8, "charm_default.code");
+_Static_assert(sizeof(charm_image) == 12, "charm_image size");
+_Static_assert(offsetof(charm_image, name) == 0, "charm_image.name");
+_Static_assert(offsetof(charm_image, code) == 8, "charm_image.code");
+_Static_assert(sizeof(charm_transform) == 12, "charm_transform size");
+_Static_assert(offsetof(charm_transform, store) == 0, "charm_transform.store");
+_Static_assert(offsetof(charm_transform, varname) == 4, "charm_transform.varname");
+_Static_assert(offsetof(charm_transform, parameters) == 8, "charm_transform.parameters");
+_Static_assert(sizeof(charm_style) == 8, "charm_style size");
+_Static_assert(offsetof(charm_style, name) == 0, "charm_style.name");
+_Static_assert(offsetof(charm_style, parent) == 4, "charm_style.parent");
+_Static_assert(sizeof(charm_screen) == 4, "charm_screen size");
+_Static_assert(offsetof(charm_screen, name) == 0, "charm_screen.name");
+_Static_assert(sizeof(charm_testcase) == 4, "charm_testcase size");
+_Static_assert(offsetof(charm_testcase, label) == 0, "charm_testcase.label");
+_Static_assert(sizeof(charm_translate_string) == 12, "charm_translate_string size");
+_Static_assert(offsetof(charm_translate_string, language) == 0, "charm_translate_string.language");
+_Static_assert(offsetof(charm_translate_string, old) == 4, "charm_translate_string.old");
+_Static_assert(offsetof(charm_translate_string, new) == 8, "charm_translate_string.new");
+_Static_assert(sizeof(charm_translate_python) == 8, "charm_translate_python size");
+_Static_assert(offsetof(charm_translate_python, language) == 0, "charm_translate_python.language");
+_Static_assert(offsetof(charm_translate_python, code) == 4, "charm_translate_python.code");
+_Static_assert(sizeof(charm_translate_block) == 8, "charm_translate_block size");
+_Static_assert(offsetof(charm_translate_block, language) == 0, "charm_translate_block.language");
+_Static_assert(offsetof(charm_translate_block, block) == 4, "charm_translate_block.block");
 _Static_assert(sizeof(charm_disp_unknown) == 4, "charm_disp_unknown size");
 _Static_assert(offsetof(charm_disp_unknown, classname) == 0, "charm_disp_unknown.classname");
 _Static_assert(sizeof(charm_disp_image) == 4, "charm_disp_image size");

@@ -113,7 +113,7 @@ def _section_offset(data: bytes, tag: str) -> int:
 
 @pytest.mark.parametrize("damage, message", [
     (lambda d: b"NOPE" + d[4:], "not a .charm bundle"),
-    (lambda d: _patch(d, 4, "<H", 1), "format 1.1"),
+    (lambda d: _patch(d, 4, "<H", 1), r"format 1\.\d+;"),
     (lambda d: d[:-16], "header says"),
     (lambda d: d[:10], "too short"),
 ])

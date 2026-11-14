@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-VERSION = (0, 1)
+VERSION = (0, 2)
 MAGIC = b"CHRM"
 NONE = 0xFFFFFFFF
 HEADER_SIZE = 16
@@ -138,8 +138,9 @@ NODE_KINDS = (
         ("arguments", CODE),
         ("identifier", STR),
     ]), flags=("interact",)),
-    Kind(3, "show", Struct("show", _IMSPEC)),
-    Kind(4, "scene", Struct("scene", _IMSPEC)),
+    # "atl": the statement has an ATL block, which isn't carried yet (R4).
+    Kind(3, "show", Struct("show", _IMSPEC), flags=("atl",)),
+    Kind(4, "scene", Struct("scene", _IMSPEC), flags=("atl",)),
     Kind(5, "hide", Struct("hide", _IMSPEC)),
     Kind(6, "with", Struct("with", [("expr", CODE), ("paired", CODE)])),
     Kind(7, "jump", Struct("jump", [("target", STR)])),
@@ -160,8 +161,30 @@ NODE_KINDS = (
     Kind(17, "user_statement", Struct("user_statement", [("name", STR), ("line", STR)])),
     Kind(18, "translate", Struct("translate", [("identifier", STR), ("language", STR), ("block", NODE)])),
     Kind(19, "end_translate"),
-    Kind(20, "show_layer", Struct("show_layer", [("layer", STR), ("at", List(CODE))])),
-    Kind(21, "camera", Struct("camera", [("layer", STR), ("at", List(CODE))])),
+    Kind(20, "show_layer", Struct("show_layer", [("layer", STR), ("at", List(CODE))]), flags=("atl",)),
+    Kind(21, "camera", Struct("camera", [("layer", STR), ("at", List(CODE))]), flags=("atl",)),
+    # Init-time statements. D18 runs them on the PC, but the graph keeps them
+    # so node names and counts match Ren'Py's.
+    Kind(22, "init", Struct("init", [("priority", I32), ("block", NODE)])),
+    Kind(23, "early_python", Struct("early_python", [("code", CODE), ("store", STR)]), flags=("hide",)),
+    Kind(24, "define", Struct("define", [
+        ("store", STR),
+        ("varname", STR),
+        ("operator", STR),  # "=", or e.g. "+=" / "|=" on Ren'Py 8
+        ("index", CODE),  # `define d["k"] = v` on Ren'Py 8
+        ("code", CODE),
+    ])),
+    Kind(25, "default", Struct("default", [("store", STR), ("varname", STR), ("code", CODE)])),
+    Kind(26, "image", Struct("image", [("name", List(STR)), ("code", CODE)]), flags=("atl",)),
+    Kind(27, "transform", Struct("transform", [("store", STR), ("varname", STR), ("parameters", CODE)]),
+         flags=("atl",)),
+    Kind(28, "style", Struct("style", [("name", STR), ("parent", STR)])),
+    Kind(29, "screen", Struct("screen", [("name", STR)])),
+    Kind(30, "testcase", Struct("testcase", [("label", STR)])),
+    Kind(31, "translate_string", Struct("translate_string", [("language", STR), ("old", STR), ("new", STR)])),
+    Kind(32, "translate_python", Struct("translate_python", [("language", STR), ("code", CODE)])),
+    Kind(33, "translate_block", Struct("translate_block", [("language", STR), ("block", NODE)]),
+         flags=("early",)),
 )
 
 DISP_KINDS = (
@@ -172,7 +195,9 @@ DISP_KINDS = (
 ASSET_TYPE = Enum("asset_type", ("other", "image", "audio", "font", "video"))
 # "source": the file's bytes as the game ships them; converted formats come with R4/R6.
 ASSET_FORMAT = Enum("asset_format", ("source",))
-CODE_MODE = Enum("code_mode", ("eval", "exec"))
+# "parameters" is a def's parameter list (`a, b=1, *args`), "arguments" a
+# call's argument list (`x, y=2`), each as Python source without parentheses.
+CODE_MODE = Enum("code_mode", ("eval", "exec", "parameters", "arguments"))
 ENUMS = (ASSET_TYPE, ASSET_FORMAT, CODE_MODE)
 
 HEADER = Struct("header", [
