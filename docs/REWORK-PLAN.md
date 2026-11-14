@@ -3,8 +3,8 @@
 > Status: v2.1, 2026-11-13. Replaces v1 of this document (same file). v1
 > assumed a LÖVE Potion runtime; the engine is now native C, so every feature
 > has been re-planned around what the hardware can actually do. v2.1 adds
-> D18–D23. "The engine" (Enchantment) and "the converter" (Witch) are used
-> throughout.
+> D18–D23; phase H added D24–D26; R2 added D27 (§6.3). "The engine"
+> (Enchantment) and "the converter" (Witch) are used throughout.
 
 ## 0. Decision log
 
@@ -38,6 +38,7 @@ Settled:
 | D24 | **MicroPython is built NaN-boxed** (`MICROPY_OBJ_REPR_D`): doubles live in the object word, so float math stops allocating. Measured in phase H: 86% less garbage per animated frame and 17% faster interactions, for 75% more heap. MicroPython's native-code emitter is not used: it can't be combined with NaN-boxing and gained only 5–15% | §6, §15 |
 | D25 | **The logic VM runs on its own thread,** below the render thread's priority. A garbage collection (110–160 ms on Old 3DS, whatever the heap size) then delays Python but never a frame: transitions, ATL and video keep running, and a per-frame Python callback that misses its frame keeps its last value. Collections are requested at quiet points (the line fully shown, nothing animating) before the heap forces one | §6, §15 |
 | D26 | **Widely shared Ren'Py libraries are recognized and run natively,** as §7.3 does for shaders: the converter matches a game's copy against the known library source, and Enchantment runs a C version with identical output; anything modified falls back to the game's own Python. First: SoDaRa's Kinetic Text Tags (MIT), shipped by 3 of the 13 corpus games, whose per-glyph Python costs 1.4–4.9 ms a frame on Old 3DS | §8.4 |
+| D27 | **The display boundary is a description, not Ren'Py's display code.** A game's scripts and Ren'Py's value-computing Python run as they are; everything that describes what is drawn or played (displayables, transforms, transitions, Characters, styles) is a passive shim object that lowers to one neutral record format, the bundle's own; only the C engine draws. MicroPython produces every description, the game's own Ren'Py checks it, and a static description that differs ships the oracle's version | §6.3 |
 
 Open: nothing. The H and R3 re-reviews (D1) may reopen decisions with
 measured data.
@@ -177,7 +178,10 @@ It emits:
    checked against; the snapshot itself comes from MicroPython, not CPython,
    so it holds exactly what the 3DS would have built.
 4. **Images**: displayable trees (§7.2), attribute tables, LayeredImage
-   definitions.
+   definitions. Items 4 and 5 are emitted as lowered records in the
+   bundle's own vocabulary. They are the check on what the MicroPython
+   init run produced, and its replacement where a static record differs
+   (§6.3).
 5. **Transforms** (ATL trees), **Characters**, **resolved styles + `gui.*`**,
    **config** (layers, tag layers, default transform, window settings, …).
 6. **Screens** as SL2 ASTs.
@@ -211,7 +215,9 @@ has been ported to the 3DS before, e.g. LiquidFenrir's `3dspython`).
   - The init phase runs on the PC and ships as a store snapshot (§6.1).
 - **The `renpy` API shim:**
   - A Python package (`renpy`, `store`, `persistent`, `config`, `gui`,
-    `style`, `_window_*`, …) backed by C bindings into the engine.
+    `style`, `_window_*`, …) backed by C bindings into the engine. Where
+    the line between Ren'Py's own Python, the shim and the engine runs is
+    set out in §6.3.
   - It implements Ren'Py's public API that games call:
     - `renpy.show/hide/scene/with_statement/pause/say/jump/call/return_statement`
     - `call_screen/show_screen/hide_screen`, `music.*/sound.*`
@@ -269,7 +275,9 @@ minutes at every launch. So init runs once, on the PC (D18):
   build with the same `renpy` shim** the 3DS uses, so the result is what the
   3DS would have computed.
 - The resulting store is written into the bundle with the D19 serializer.
-  The 3DS loads it instead of running init.
+  The 3DS loads it instead of running init. What init registered rather
+  than stored (images, styles, screens, channels) reaches the bundle as
+  lowered records through the recording backend (§6.3).
 - Init blocks are split at convert time: top-level `def`, `class` and
   `import` statements still run on the 3DS (cheap, and they recreate the
   functions and classes the snapshot refers to). Everything else comes from
@@ -299,6 +307,188 @@ Alternatives considered and rejected:
 R2 starts with a spike: MicroPython on hardware, running a conformance suite
 built from the corpus's own Python, compared against CPython with each game's
 flags.
+
+### 6.3 The display boundary (D27)
+
+Init can't finish, and no game can run, until something stands in for
+`renpy.display`, styles and `Character`. Ren'Py's display layer is mostly
+Python, so there were two ways to do it: run Ren'Py's own classes and have
+the engine read them, or write our own. What R2 measured decided it.
+
+**Evidence (2026-11-14):**
+- All 17 corpus games ship Ren'Py's Python source. `renpy/display` alone is
+  17,000–30,000 lines in 27–35 modules, depending on the version; the whole
+  package is 47,000 lines in 6.17 and 66,000 in 7.0.
+- Ren'Py's own modules cost about 50 bytes of MicroPython heap per line of
+  code before they build a single object (`renpy.ui`: 905 lines, 48 KB).
+  Extrapolated, that puts `renpy/display` at roughly 1 MB and the package
+  at 2–3 MB, out of a 4–12 MB heap.
+- Ren'Py draws by calling `render()` down the displayable tree in Python,
+  every frame. One interaction's light logic already takes 31–37 ms on Old
+  3DS (phase H), so that tree can't run there at all. Ren'Py's classes
+  could only ever be data holders for a C renderer.
+- As data holders they'd tie the C engine to Ren'Py's internals, which
+  change with every version: `transform.py` is 1,042 lines in 7.0 and 1,389
+  in 8.3. The public constructors barely move: `Frame(image, left, top,
+  right, bottom, …)` is the same from 6.17 to 8.3 apart from one new
+  keyword (`tile_ratio`) and a changed default.
+- Games need a real display API in Python, not just a list of built-in
+  classes: 14 of the 17 contain `renpy.Displayable` subclasses with their
+  own `render()` (up to 26, in Mice Tea and A Date with Death), counting
+  the ones in Ren'Py's common code.
+- After init, a store holds few display objects (Jisei: 77 curried
+  transition constructors, 15 ATL transforms, 15 Characters, 4 styles, 6
+  image objects). The bulk is in registries: Jisei's 207 images, 155 style
+  statements, 52 screens.
+- The bundle's displayable vocabulary is nearly empty so far (`unknown` and
+  `image`), so whichever side defines it first owns it.
+
+**Three zones.** Every piece of Ren'Py belongs to exactly one:
+
+1. **Logic: Ren'Py's own code, as the game ships it.** The game's scripts,
+   `renpy/common/*.rpy`, and the Ren'Py modules that only compute values
+   (`config`, `object`, `curry`, `preferences`, `persistent`, `minstore`,
+   `defaultstore`, `ui`; `color`, `substitutions` and others join when
+   their imports are all met). Each game runs its own version's copy, so
+   version differences in this zone cost nothing.
+2. **Description: the shim, written once.** Every object that says what to
+   draw or play: displayables, transforms and ATL, transitions, Characters,
+   styles, audio channels. These are passive. Building or changing one
+   never draws, never calls the engine, and allocates nothing outside the
+   MicroPython heap.
+3. **Engine: C.** Everything that happens on screen or over time (§7, §8).
+   It reads records; it never reads a Python object.
+
+The rule for placing a module: if it computes values, it's zone 1 and runs
+as shipped; if its objects end up on screen, its public classes are
+rewritten in zone 2; if Ren'Py itself compiled it (`render`, the style
+classes, text layout, `gl`, the audio backend), it's zone 3.
+
+**Description objects.**
+- Shim classes at Ren'Py's own module paths (`renpy.display.layout.Fixed`,
+  `renpy.display.im.Image`, `renpy.character.ADVCharacter`, …), because
+  games and common code name them that way and the D19 serializer writes a
+  class as its module and qualified name. A class that moved between
+  versions is an alias.
+- A constructor does what Ren'Py's public one does with its arguments
+  (`renpy.easy.displayable` coercion of strings and colours, position
+  pairs, property prefixes, `kind` inheritance) and stores the result as
+  plain attributes under Ren'Py's public names, so `e.name`,
+  `trans.xoffset = 4` and `d.child` behave. Where the public API differs
+  between versions (a default, a new keyword), the constructor branches on
+  the game's Ren'Py version.
+- They're ordinary Python objects: the snapshot, saves and rollback write
+  them with no special case.
+- A name the shim doesn't have is still a recording placeholder, listed in
+  the Problem Report with its call site (R2.4's existing mechanism).
+
+**Lowering: one record format.**
+- A description lowers to a tree of neutral records: a kind, its fields,
+  its children. The kinds and fields are declared in
+  `witch/bundle/schema.py`, next to the node kinds, and generate the C
+  header as before. This is the bundle's `DISP` vocabulary; it grows one
+  kind at a time as a game needs it, from R2.4 on.
+- Lowering evaluates everything that can be evaluated: positions, colours,
+  asset names, style properties, and ATL expressions against the
+  transform's parameters. What's left is constants the engine can run.
+- Whatever must be evaluated again later becomes a **callback slot**: a
+  `DynamicDisplayable`'s function, a `ConditionSwitch`'s conditions, an ATL
+  `function`, a custom displayable's `render`. The record holds a slot
+  number; the VM holds the function. When the engine needs a value it asks
+  the VM thread, and keeps the last one if the answer is late (D25).
+- The same lowering code runs at convert time and on the device, so a
+  displayable built in a label at 3 a.m. into a playthrough goes through
+  the code the init run already exercised.
+
+**The backend: one narrow port.**
+- The shim reaches the engine through a single module, `_charm`: register
+  an image, a style, a channel, a screen; show, hide, scene, transition;
+  interact; play. Lowered records go in; nothing else crosses.
+- On the device and in the desktop engine, `_charm` is C: it posts records
+  and commands to the render thread. A blocking call (`renpy.pause`,
+  `renpy.call_screen`, a say inside a Python block) blocks the VM thread
+  until the engine finishes the interaction, which D25's threading already
+  allows.
+- At convert time, `_charm` is a recording backend in Python: it keeps what
+  it's given, and the init result carries those registries to Witch, which
+  writes them into the bundle. Anything that would interact during init is
+  an error, as it is in Ren'Py.
+- The snapshot (§6.1) is therefore the store plus Ren'Py's own module
+  state from zone 1 (`renpy.config`, preferences, persistent); the
+  registries travel as bundle sections the engine reads in place.
+
+**Custom displayables.** A game's `renpy.Displayable` subclass runs as
+written. `renpy.Render` is a description too: `blit`, `place`, `subpixel_blit`
+and the canvas calls record a draw list, which lowers like anything else.
+`render()` is called when the displayable is first shown and whenever it
+asks for `renpy.redraw`, never unprompted per frame.
+
+**Produce, check, fall back.** This is what keeps hand-written descriptions
+honest, and it's the same for images, transforms, transitions, Characters
+and styles:
+- **Produce:** the init run on MicroPython builds every description, so
+  the bundle holds what the 3DS itself would have built (§6.1).
+- **Check:** the harvester lowers the same objects from inside the game's
+  own Ren'Py: every registry entry, and every description in the oracle
+  store. This is the only code that knows Ren'Py's internals, and it lives
+  on the PC, in the version it's reading. Witch compares the two records.
+- **Fall back:** a description is *static* when its record has no callback
+  slot and no reference into the store. If a static record differs, or
+  the shim doesn't know its class, the oracle's record ships and the
+  difference is reported as a shim gap. If the class has no kind at all,
+  the oracle can still render it to an image (§7.2's baking). A record
+  that isn't static ships as MicroPython built it, and the difference is
+  reported as a visual mismatch with its reach.
+- So a shim bug in a constructor can't put a wrong image in a bundle, and
+  every game converted is a conformance run of the shim against that
+  game's Ren'Py version.
+- Styles follow the same pattern with one addition: the property tables
+  (prefixes, aliases, priorities) are compiled into Ren'Py, so the
+  harvester reads them out of the game's own Ren'Py, and the shim resolves
+  with those. The resolved style table in the bundle is checked against
+  the oracle's (§8.5).
+
+**Where the pieces land:**
+
+| Ren'Py | Zone | How |
+|---|---|---|
+| Game scripts, `renpy/common/*.rpy`, value-computing `renpy` modules | 1 | Run as shipped |
+| `renpy.ui` | 1 | Ren'Py's own; the widgets it builds are zone 2 descriptions |
+| Displayables (`layout`, `image`, `im`, `imagelike`, `text`, `behavior`, `viewport`, `dragdrop`, `particle`, `video`) | 2 | Description classes, lowered to `DISP` records |
+| `Transform`, ATL | 2 | An ATL transform is the ATL tree already in the bundle plus its parameter bindings; lowering evaluates the expressions, the C ATL VM runs the result. Warpers registered from Python are sampled into a table when lowered |
+| Transitions | 2 | Records; the curried constructors in the store stay Ren'Py's `curry` |
+| `Character` | 2 | Constructor semantics checked against the oracle. `__call__` keeps Ren'Py's `do_add`/`do_display`/`do_done` protocol, each default step one backend call, so subclasses that override a step still work; the say itself is native (§8.2) |
+| Styles, `style` statements | 2 | Record assignments; resolve with the game's own property tables |
+| Screens | — | SL2 trees come from the harvest; registration is a name in the backend; screen Python is zone 1 |
+| `renpy.show`/`hide`/`scene`/`with_statement`/`pause`/`say`/`call_screen`, `music.*` | 2 | Thin functions over `_charm` |
+| `renpy.Displayable` subclasses, `renpy.Render`, `renpy.redraw` | 1 over 2 | The game's class runs; its draw list is a description |
+| `render`, `accelerator`, style classes, text layout, `gl`, `renpysound` | 3 | The engine |
+
+**Rejected:**
+- **Running Ren'Py's display classes as data holders.** Exact constructor
+  behaviour for free, but 1 MB of heap for code that can't run, and a C
+  engine that would need a reader per Ren'Py version for each class's
+  private attributes. The check above gets the same exactness from the
+  oracle instead, on the PC.
+- **Descriptions as live engine handles** (each constructor calling into
+  C). Every constructor would cross the VM/render thread boundary, engine
+  objects would need their lifetimes tied to the garbage collector, and
+  the serializer would have to read state back out of the engine.
+- **Taking registries from the oracle only.** It would hide every shim
+  difference until the same constructor ran at play time, where nothing
+  can check it.
+
+**Costs, and what would reopen this:**
+- Lowering on the device costs Python time for games that build
+  displayables every interaction (Mice Tea's CharacterImage). Each object
+  caches its lowered record until it changes; R4 measures it on Old 3DS
+  against the 50 ms interaction budget.
+- A custom `render()` is Python on the VM thread. It's bounded by redraw
+  requests, and D25 keeps the last draw list on screen when it's late; D26
+  covers the libraries that redraw every frame.
+- D27 is reopened if the corpus check shows a family of classes whose
+  records can't be made to match the oracle's without mirroring Ren'Py's
+  internals.
 
 ## 7. Display: scene, effects, transitions
 
@@ -460,7 +650,8 @@ Script chunks load per source file or label range and unload when cold.
 
 ### 8.5 Screens and UI
 
-- An SL2 runtime in C, with styles pre-resolved by the oracle:
+- An SL2 runtime in C, with styles resolved at convert time and checked
+  against the oracle's (§6.3):
   - Layout follows Ren'Py's algorithms: box spacing and fills, `xfill`/
     `yfill`, size groups, grids, sides, frames, viewports.
   - All screen statements from v1 §8. Screen Python and actions run in
@@ -936,9 +1127,35 @@ The old pipeline is frozen (D22).
     - **R2.3 Init runner:** MicroPython's desktop build runs a game's init
       (common + game, in Ren'Py's order) on the shim, as Witch's D18 step.
     - **R2.4 Shim:** grown until Jisei's init runs; every missing API is
-      reported with its call site.
+      reported with its call site. In four parts, along §6.3's zones:
+      - **R2.4a Logic zone. Done 2026-11-14.** Placeholders for every
+        unimplemented name, Ren'Py's own value-computing modules run from
+        the game's source, stand-ins for the standard modules MicroPython
+        lacks, and two MicroPython patches (`dict` from a mapping
+        subclass; attributes on functions). Jisei: 2,260 of 2,271 init
+        statements run, 556 of the oracle's 635 store names exist. Of the
+        23 remaining errors, three are imports still to stand in
+        (`pygame_sdl2`, `tarfile`, `pyobjus`); most of the rest need the
+        description zone.
+      - **R2.4b The backend port.** `_charm` as a recording backend; the
+        init result carries its registries; the `image`, `transform`,
+        `style`, `screen`, `default` and `translate strings` statements
+        run instead of being listed.
+      - **R2.4c Description classes** for what Jisei's init builds:
+        images and `im.*`, `Frame`, `Solid`, `Null`, the box layouts
+        `renpy.ui` uses, `Transform` and ATL transforms, the transition
+        families of `00definitions.rpy`, `Character`, styles, audio
+        channels. Their kinds are added to `schema.py` as each is written.
+      - **R2.4d The check.** The harvester lowers the oracle's registries
+        and the descriptions in its store to the same records, reading the
+        style property tables from the game's own Ren'Py.
+      - Exit: Jisei's init runs every statement with no error and no
+        placeholder touched on an init path, and each registry either
+        matches the oracle's or lists its differences.
     - **R2.5 Serializer (D19) and comparison:** MicroPython's store against
-      the oracle, value by value.
+      the oracle, value by value. A description object compares by its
+      lowered record (§6.3), since its attributes are the shim's and not
+      Ren'Py's; everything else compares as it is.
     - **R2.6 On device:** a full init on Old 3DS matches the snapshot.
 - **R3 — Engine core: Jisei on hardware.**
   - Platform layers (3DS + desktop); VM; scene model; renderer with TEV
@@ -956,6 +1173,10 @@ The old pipeline is frozen (D22).
     survive reconversion.
   - *Plan re-review (D1).*
 - **R4 — Displayables, assets, framing.**
+  - The rest of the description vocabulary (§6.3), each kind arriving with
+    its shim class, its harvester lowering and its engine code together;
+    custom displayables through `renpy.Render`; lowering cost measured on
+    Old 3DS.
   - Composite cache, LayeredImage, `im.*` at runtime, particles, 3D stage,
     quality-gated assets, pixel-art pipeline, framing with its content check
     and preview, wide mode.
