@@ -269,14 +269,14 @@ init 999999 python:
         # (REWORK-PLAN §6.3's logic zone), in the order Ren'Py imports them:
         # config defaults, the base object, preferences, curry, colours, the
         # displayable coercions, persistent data, the user-statement
-        # registry, the ui builders, the names every store starts with
-        # (minstore) and the main store's (defaultstore). As source on
-        # Python 3, as a tree on Python 2. A list, not a dict: Python 2's
-        # dicts have no order, and the load order matters.
+        # registry, text substitution, the ui builders, the names every
+        # store starts with (minstore) and the main store's (defaultstore).
+        # As source on Python 3, as a tree on Python 2. A list, not a dict:
+        # Python 2's dicts have no order, and the load order matters.
         modules = []
         renpy_dir = os.path.dirname(renpy.__file__)
-        for module in ("config", "object", "preferences", "curry", "color", "easy", "persistent", "statements", "ui",
-                       "minstore", "defaultstore"):
+        for module in ("config", "object", "preferences", "curry", "color", "easy", "persistent", "statements",
+                       "substitutions", "ui", "minstore", "defaultstore"):
             module_path = os.path.join(renpy_dir, module + ".py")
             if not os.path.exists(module_path):
                 modules.append(["renpy." + module, {"error": "the game ships no source for it"}])

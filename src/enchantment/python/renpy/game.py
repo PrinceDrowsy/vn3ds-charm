@@ -4,6 +4,7 @@ from renpy import missing_attribute
 
 persistent = None
 preferences = None
+less_updates = False  # Ren'Py's --less-updates, for screen readers
 
 
 def __getattr__(name):
