@@ -15,6 +15,7 @@ sys.path.append("stdlib")
 sys.path.append("convert")
 
 import _charm  # noqa: E402
+import charm_lower  # noqa: E402
 import charm_stdlib  # noqa: E402
 import pyrandom  # noqa: E402
 import renpy  # noqa: E402
@@ -161,11 +162,13 @@ class Dumper:
         if isinstance(v, missing.Missing):
             return {"missing": v._path}
         if isinstance(v, type):
-            return {"class": qualified(v)}
+            return {"class": charm_lower.qualified(v)}
+        if type(v).__name__ == "module" or isinstance(v, (StoreModule, missing.MissingModule)):
+            return {"module": getattr(v, "__name__", None) or getattr(v, "_name", "?")}
         if type(v).__name__ in ("function", "closure", "bound_method") or callable(v) and not hasattr(v, "__dict__"):
             # Functions take attributes on this MicroPython (patch 0002), so
             # they have a __dict__ too.
-            return {"function": qualified(getattr(v, "__func__", v))}
+            return {"function": charm_lower.qualified(getattr(v, "__func__", v))}
         if depth > 40:
             return {"too_deep": type(v).__name__}
         key = id(v)
@@ -182,19 +185,14 @@ class Dumper:
             out["dict"] = [[self.value(k, depth + 1), self.value(x, depth + 1)] for k, x in v.items()]
         elif isinstance(v, (set, frozenset)):
             out["set"] = [self.value(x, depth + 1) for x in v]
+        elif charm_lower.kind_of(type(v))[0] is not None or isinstance(v, renpy.style.StyleCore):
+            # A description (REWORK-PLAN §6.3): compared by its record.
+            out["lowered"] = charm_lower.lower(v)
         else:
-            out["object"] = qualified(type(v))
+            out["object"] = charm_lower.qualified(type(v))
             attrs = getattr(v, "__dict__", {})
             out["attrs"] = dict((k, self.value(x, depth + 1)) for k, x in attrs.items() if not k.startswith("__"))
         return out
-
-
-def qualified(obj):
-    module = getattr(obj, "__module__", None)
-    if module is None:
-        # MicroPython's functions have no __module__; their globals know.
-        module = getattr(obj, "__globals__", {}).get("__name__")
-    return "%s.%s" % (module or "?", getattr(obj, "__name__", "?"))
 
 
 def stand_in_modules(names, loaded):
@@ -328,6 +326,7 @@ def main(program_path, result_path):
 
     for flag, value in program["platform"].items():
         setattr(renpy, flag, tuple(value) if isinstance(value, list) else value)
+    charm_lower.load(program["descriptions"])
     _charm.labels = set(program["all_labels"])
     _charm.files = program["files"]
     _charm.common_files = program["common_files"]
@@ -433,7 +432,7 @@ def main(program_path, result_path):
     with open(result_path, "w") as f:
         json.dump({"ran": ran[0], "errors": errors, "missing": missing.report(), "store": stores,
                    "registries": {
-                       "images": [[list(name), dumper.value(d)] for name, d in _charm.images.items()],
+                       "images": [[list(name), charm_lower.lower(d)] for name, d in _charm.images.items()],
                        "screens": _charm.screens,
                        "defaults": [list(d) for d in _charm.defaults],
                        "strings": _charm.strings,
@@ -441,7 +440,7 @@ def main(program_path, result_path):
                        "resolved_styles": [[list(name), resolved(style, dumper)]
                                            for name, style in renpy.style.styles.items()],
                        "deferred_styles": renpy.translation.deferred_styles,
-                       "channels": dict((name, dumper.value(c)) for name, c in renpy.audio.audio.channels.items()),
+                       "channels": [[name, charm_lower.lower(c)] for name, c in renpy.audio.audio.channels.items()],
                    }}, f)
 
 

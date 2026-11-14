@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 
 from . import py2
+from ..bundle import descriptions
 from ..renpy import styles
 
 # Init-time statement classes and the fields whose code they run.
@@ -205,7 +206,7 @@ def program(harvest: dict) -> dict:
             "renpy_modules": harvest["renpy_modules"], "style_tables": _style_tables(harvest),
             "modules": modules, "early": early, "init": init, "rpym": rpym,
             "steps": dict((str(i), step) for i, step in steps.items()), "labels": labels,
-            "all_labels": sorted(harvest["labels"]),
+            "all_labels": sorted(harvest["labels"]), "descriptions": descriptions.table(),
             # Ren'Py keeps the screen size init ends with in persistent data
             # and applies it before init on every later launch, so early
             # code sizes itself to the game's screen; a player sees that.

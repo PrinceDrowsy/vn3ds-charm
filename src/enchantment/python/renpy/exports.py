@@ -117,14 +117,6 @@ def iconify():
     return _charm.engine("iconify")
 
 
-def call_in_new_context(label, *args, **kwargs):
-    return _charm.engine("call_in_new_context", label, *args, **kwargs)
-
-
-def invoke_in_new_context(callable, *args, **kwargs):
-    return _charm.engine("invoke_in_new_context", callable, *args, **kwargs)
-
-
 def list_files(common=False):
     return _charm.list_files(common)
 
@@ -146,6 +138,8 @@ _IMPORTED = {
     "register_persistent": ("renpy.persistent", "register_persistent"),
     "eval": ("renpy.python", "py_eval"),
     "random": ("renpy.python", "rng"),
+    "call_in_new_context": ("renpy.game", "call_in_new_context"),
+    "invoke_in_new_context": ("renpy.game", "invoke_in_new_context"),
     "Keymap": ("renpy.display.behavior", "Keymap"),
     "show_display_say": ("renpy.character", "show_display_say"),
     "predict_show_display_say": ("renpy.character", "predict_show_display_say"),
@@ -159,13 +153,13 @@ _IMPORTED = {
 
 # Curried forms, made when first used: renpy.curry loads from the game's
 # source after this module.
-_CURRIED = {"curried_call_in_new_context": call_in_new_context,
-            "curried_invoke_in_new_context": invoke_in_new_context}
+_CURRIED = {"curried_call_in_new_context": "call_in_new_context",
+            "curried_invoke_in_new_context": "invoke_in_new_context"}
 
 
 def __getattr__(name):
     if name in _CURRIED:
-        value = globals()[name] = renpy.curry.curry(_CURRIED[name])
+        value = globals()[name] = renpy.curry.curry(getattr(renpy.game, _CURRIED[name]))
         return value
     if name in _IMPORTED:
         module, attr = _IMPORTED[name]

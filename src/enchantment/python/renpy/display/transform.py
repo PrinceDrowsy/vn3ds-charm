@@ -5,7 +5,7 @@ ATL and drawing are the engine's (REWORK-PLAN §6.3, §7.4)."""
 import math
 
 import renpy
-from renpy import missing_attribute
+from renpy import missing, missing_attribute
 from renpy.display.layout import Container
 
 
@@ -506,9 +506,10 @@ class ATLTransform(Transform):
         self.raw_child = self.child
 
     def _show(self):
-        # Ren'Py computes the starting state here; that's the ATL VM's job,
-        # when the transform is shown.
-        pass
+        # Ren'Py runs the ATL to its starting state here. That takes the
+        # ATL VM, which is the engine's; until init can call it, the state
+        # stays as constructed and the call is reported.
+        missing.record("ATL run during init (ATLTransform._show)")
 
 
 def __getattr__(name):
