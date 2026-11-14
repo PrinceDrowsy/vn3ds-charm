@@ -1,0 +1,73 @@
+diff --git a/py/objstr.c b/py/objstr.c
+index b2516fa..0b044b7 100644
+--- a/py/objstr.c
++++ b/py/objstr.c
+@@ -601,7 +601,15 @@ static mp_obj_t bytes_subscr(mp_obj_t self_in, mp_obj_t index, mp_obj_t value) {
+         if (mp_obj_is_type(index, &mp_type_slice)) {
+             mp_bound_slice_t slice;
+             if (!mp_seq_get_fast_slice_indexes(self_len, index, &slice)) {
+-                mp_raise_NotImplementedError(MP_ERROR_TEXT("only slices with step=1 (aka None) are supported"));
++                // a step other than 1, walked as mp_seq_extract_slice does
++                vstr_t vstr;
++                vstr_init(&vstr, 16);
++                mp_int_t i = slice.start;
++                while (slice.step < 0 ? i >= slice.stop : i < slice.stop) {
++                    vstr_add_byte(&vstr, self_data[i]);
++                    i += slice.step;
++                }
++                return mp_obj_new_str_type_from_vstr(type, &vstr);
+             }
+             return mp_obj_new_str_of_type(type, self_data + slice.start, slice.stop - slice.start);
+         }
+diff --git a/py/objstrunicode.c b/py/objstrunicode.c
+index fc51166..80370c1 100644
+--- a/py/objstrunicode.c
++++ b/py/objstrunicode.c
+@@ -203,7 +203,30 @@ static mp_obj_t str_subscr(mp_obj_t self_in, mp_obj_t index, mp_obj_t value) {
+             ostep = slice->step;
+ 
+             if (ostep != mp_const_none && ostep != MP_OBJ_NEW_SMALL_INT(1)) {
+-                mp_raise_NotImplementedError(MP_ERROR_TEXT("only slices with step=1 (aka None) are supported"));
++                // a step other than 1: index the characters, then walk them
++                // as mp_seq_extract_slice does
++                size_t n = utf8_charlen(self_data, self_len);
++                const byte **chars = m_new(const byte *, n + 1);
++                const byte *p = self_data;
++                for (size_t c = 0; c < n; c++) {
++                    chars[c] = p;
++                    ++p;
++                    while (UTF8_IS_CONT(*p)) {
++                        ++p;
++                    }
++                }
++                chars[n] = self_data + self_len;
++                mp_bound_slice_t bound;
++                mp_seq_get_fast_slice_indexes(n, index, &bound);
++                vstr_t vstr;
++                vstr_init(&vstr, 16);
++                mp_int_t c = bound.start;
++                while (bound.step < 0 ? c >= bound.stop : c < bound.stop) {
++                    vstr_add_strn(&vstr, (const char *)chars[c], chars[c + 1] - chars[c]);
++                    c += bound.step;
++                }
++                m_del(const byte *, chars, n + 1);
++                return mp_obj_new_str_from_vstr(&vstr);
+             }
+ 
+             const byte *pstart, *pstop;
+diff --git a/py/objtuple.c b/py/objtuple.c
+index c0ba1fd..6462cf6 100644
+--- a/py/objtuple.c
++++ b/py/objtuple.c
+@@ -193,7 +193,10 @@ mp_obj_t mp_obj_tuple_subscr(mp_obj_t self_in, mp_obj_t index, mp_obj_t value) {
+         if (mp_obj_is_type(index, &mp_type_slice)) {
+             mp_bound_slice_t slice;
+             if (!mp_seq_get_fast_slice_indexes(self->len, index, &slice)) {
+-                mp_raise_NotImplementedError(MP_ERROR_TEXT("only slices with step=1 (aka None) are supported"));
++                size_t len;
++                mp_obj_t *items;
++                mp_obj_list_get(mp_seq_extract_slice(self->items, &slice), &len, &items);
++                return mp_obj_new_tuple(len, items);
+             }
+             mp_obj_tuple_t *res = MP_OBJ_TO_PTR(mp_obj_new_tuple(slice.stop - slice.start, NULL));
+             mp_seq_copy(res->items, self->items + slice.start, res->len, mp_obj_t);
