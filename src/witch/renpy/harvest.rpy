@@ -13,7 +13,8 @@ init 999 python:
         renpy.arguments.takes_no_arguments("Witch's harvester")
 
         # In the store, list/dict/set are Ren'Py's revertable subclasses, so
-        # the real built-ins have to be fetched for isinstance.
+        # the real built-ins are fetched for isinstance, and for the big
+        # tables, which don't need rollback's bookkeeping.
         try:
             import __builtin__ as builtins
             text_types = (builtins.str, builtins.unicode)
@@ -24,8 +25,8 @@ init 999 python:
         number_types = (builtins.bool, builtins.int, builtins.float)
 
         script = renpy.game.script
-        nodes = list(script.all_stmts)
-        index = dict((id(n), i) for i, n in enumerate(nodes))
+        nodes = builtins.list(script.all_stmts)
+        index = builtins.dict((id(n), i) for i, n in enumerate(nodes))
         unknown_refs = []
 
         def text(value):
@@ -110,20 +111,19 @@ init 999 python:
                         names.append(name)
             return names
 
-        out_nodes = []
-        for n in nodes:
+        def node_entry(n):
             fields = {}
             for name in slots(type(n)):
                 if hasattr(n, name):
                     fields[name] = enc(getattr(n, name))
-            out_nodes.append({
+            return {
                 "class": type(n).__name__,
                 "name": node_name(n.name),
                 "file": n.filename,
                 "line": n.linenumber,
                 "next": index.get(id(n.next)) if n.next is not None else None,
                 "fields": fields,
-            })
+            }
 
         labels = {}
         for key, n in script.namemap.items():
@@ -138,23 +138,22 @@ init 999 python:
                 "file": filename if isinstance(filename, text_types) else None,
             }
 
-        named = set(id(n) for n in script.namemap.values())
-        out = {
-            "harvest_version": 2,
-            "renpy_version": renpy.version(),
-            "screen_size": [config.screen_width, config.screen_height],
-            "nodes": out_nodes,
-            "labels": labels,
-            "images": images,
-            "named_nodes": len(named),
-            "named_outside_graph": len(named - set(index)),
-            "unindexed_refs": unknown_refs,
-        }
-        # Written under a temporary name and renamed, so a finished file is
-        # the signal that the harvest completed.
+        named = builtins.set(id(n) for n in script.namemap.values())
+
+        # Nodes are written one at a time: a large game held whole in memory
+        # doesn't fit in a 32-bit Ren'Py 6. The file is written under a
+        # temporary name and renamed, so a finished file means a finished harvest.
         path = os.environ["WITCH_HARVEST_OUT"]
         with open(path + ".part", "w") as f:
-            json.dump(out, f)
+            f.write('{"harvest_version": 2, "renpy_version": %s, "screen_size": %s, "nodes": ['
+                    % (json.dumps(renpy.version()), json.dumps([config.screen_width, config.screen_height])))
+            for i, n in enumerate(nodes):
+                if i:
+                    f.write(",\n")
+                json.dump(node_entry(n), f)
+            f.write('],\n"labels": %s,\n"images": %s,\n"named_nodes": %d,\n"named_outside_graph": %d,\n'
+                    '"unindexed_refs": %s}' % (json.dumps(labels), json.dumps(images), len(named),
+                                               len(named - builtins.set(index)), json.dumps(unknown_refs)))
         os.rename(path + ".part", path)
         return False
 
