@@ -32,7 +32,13 @@ def run(step):
     missing.where = (step["file"], step["line"])
     main = store_dicts["store"]
     if kind in ("Python", "EarlyPython"):
-        exec(code(step, "code"), create_store(step["store"]))
+        # `python hide` code runs with locals of its own, as Ren'Py's
+        # py_exec_bytecode gives it, so its wrapper function stays out of
+        # the store.
+        if step["hide"]:
+            exec(code(step, "code"), create_store(step["store"]), {})
+        else:
+            exec(code(step, "code"), create_store(step["store"]))
     elif kind == "CreateStore":
         if step["store"] not in renpy.config.special_namespaces:
             create_store(step["store"])
@@ -299,6 +305,7 @@ def main(program_path, result_path):
 
     for flag, value in program["platform"].items():
         setattr(renpy, flag, tuple(value) if isinstance(value, list) else value)
+    renpy.atl.load_properties(program["atl_properties"])
     _charm.files = program["files"]
     _charm.common_files = program["common_files"]
     if program["style_tables"] is not None:

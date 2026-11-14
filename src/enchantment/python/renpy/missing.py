@@ -20,7 +20,13 @@ def record(path):
 
 
 class Missing:
-    def __init__(self, path):
+    def __init__(self, path, *class_args):
+        if class_args:
+            # `class C(placeholder)`: Python builds C by calling the
+            # placeholder's type with (name, bases, namespace), so C is a
+            # placeholder too.
+            bases = class_args[0]
+            path = "%s (subclassed as %s)" % (bases[0]._path, path)
         self._path = path
         record(path)
 

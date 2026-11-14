@@ -10,6 +10,14 @@ def register_image(name, d):
     _charm.image(name, d)
 
 
+def get_available_image_tags():
+    tags = []
+    for name in _charm.image_names():
+        if name[0] not in tags:
+            tags.append(name[0])
+    return tags
+
+
 def get_registered_image(name):
     if not isinstance(name, tuple):
         name = tuple(name.split())

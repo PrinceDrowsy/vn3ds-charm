@@ -6,7 +6,7 @@ that adds the missing pieces and passes everything else through.
   empty) and path (stdlib/ospath.py).
 - collections: defaultdict, which MicroPython only has in micropython-lib.
 
-Modules with no place on the device (the updater's tarfile, the PC
+Modules with no place on the device (the updater's tarfile, threads, urllib, subprocess, zlib and codecs, the PC
 engine's pygame_sdl2) are placeholders that report each use.
 """
 import collections as _collections
@@ -63,7 +63,7 @@ class _Proxy:
             return getattr(self._module, name)
 
 
-_ABSENT_MODULES = ("tarfile", "pygame_sdl2")
+_ABSENT_MODULES = ("tarfile", "threading", "urllib", "urllib.parse", "urllib.request", "subprocess", "zlib", "codecs", "pygame_sdl2")
 
 
 def install():

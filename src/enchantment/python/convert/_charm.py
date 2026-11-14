@@ -19,6 +19,10 @@ def get_image(name):
     return images.get(name)
 
 
+def image_names():
+    return list(images)
+
+
 def has_image(name):
     return name in images
 

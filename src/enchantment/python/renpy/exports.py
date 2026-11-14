@@ -96,6 +96,7 @@ _IMPORTED = {
     "predict": ("renpy.easy", "predict"),
     "register_persistent": ("renpy.persistent", "register_persistent"),
     "eval": ("renpy.python", "py_eval"),
+    "get_available_image_tags": ("renpy.display.image", "get_available_image_tags"),
     "music": ("renpy.audio.music", None),
     "sound": ("renpy.audio.sound", None),
 }
