@@ -305,7 +305,6 @@ def main(program_path, result_path):
 
     for flag, value in program["platform"].items():
         setattr(renpy, flag, tuple(value) if isinstance(value, list) else value)
-    renpy.atl.load_properties(program["atl_properties"])
     _charm.files = program["files"]
     _charm.common_files = program["common_files"]
     if program["style_tables"] is not None:
@@ -395,6 +394,8 @@ def main(program_path, result_path):
         renpy.config.locked = old_locked
 
     renpy.exports.load_module = load_rpym
+    # renpy.atl builds on renpy.object, so it loads after Ren'Py's modules.
+    attempt(("atl", 0), renpy.atl.load_properties, program["atl_properties"])
     attempt(("startup", 0), startup, load_rpym, program["rpym"])
     run_steps(program["early"])
     attempt(("persistent", 0), load_persistent)

@@ -120,5 +120,14 @@ class ImageReference(renpy.display.core.Displayable):
         return rv
 
 
+# Names Ren'Py keeps here for old code; looked up when used, since their
+# modules import this one.
+_MOVED = {"Image": ("renpy.display.im", "image"), "Solid": ("renpy.display.imagelike", "Solid"),
+          "Frame": ("renpy.display.imagelike", "Frame"), "ImageButton": ("renpy.display.behavior", "ImageButton")}
+
+
 def __getattr__(name):
+    if name in _MOVED:
+        module, attr = _MOVED[name]
+        return getattr(__import__(module, None, None, [attr]), attr)
     return missing_attribute("renpy.display.image", name)
