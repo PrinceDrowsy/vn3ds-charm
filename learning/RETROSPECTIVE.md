@@ -164,6 +164,19 @@ The first phases of `docs/REWORK-PLAN.md`: the bundle format and verifier
   was read before changing the rewrite; and emulate a later launch, not a
   first one, since that's what a player sees.
 
+- **A broken harvest script put a window on the owner's screen.**
+  (R2.4d) A patch script wrote `\n` into the harvest script through a
+  Python string in a shell heredoc, which turned it into a real line
+  break inside a string literal. Ren'Py stopped on its parse-error screen
+  in the scratch copy, and the harvester, which only watched for
+  `traceback.txt`, waited out its ten-minute timeout with the window
+  open. This is the same escape mistake as before, made again by reaching
+  for a script instead of the Edit tool. *Prevention:* a test now parses
+  the harvest script's Python before anything can install it; the
+  harvester also watches Ren'Py's `errors.txt` and closes the copy at
+  once; and text containing backslash escapes goes into files with the
+  Write or Edit tool, never through a script in a heredoc.
+
 ### What to do differently
 
 - Run the widest corpus as early as possible: the version differences

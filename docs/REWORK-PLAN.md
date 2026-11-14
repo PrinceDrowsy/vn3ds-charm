@@ -1185,9 +1185,23 @@ The old pipeline is frozen (D22).
         init ended with before init on every later launch, so init here
         does too. The comparison still lives in a scratch script; it moves
         into Witch with R2.5's comparison.
-      - **R2.4d The check.** The harvester lowers the oracle's registries
-        and the descriptions in its store to the same records, reading the
-        style property tables from the game's own Ren'Py.
+      - **R2.4d The check. Done for Jisei, 2026-11-14.** The vocabulary
+        is declared once (`witch/bundle/descriptions.py`: for each kind,
+        the classes that lower to it and the attributes that define it).
+        The harvester lowers Ren'Py's own objects with it, the shim lowers
+        its descriptions with it (`charm_lower.py`), and Witch compares
+        the records (`witch/python/compare.py`): an int never equals a
+        float, floats agree to the last place, dicts are unordered. Jisei:
+        all 206 image records (735 images inside 165 composites, with
+        their styles) and all 12 audio channels match; of the 37
+        descriptions in the store (Characters, transforms, the keymap), 36
+        match. The one that doesn't is `config.default_transform`, whose
+        state Ren'Py computes by running its ATL during init; that takes
+        the ATL VM (R3), and until init can call it the run is reported.
+        Records are plain data so far; each kind gets its binary layout in
+        `schema.py` when its engine code is written (R3, R4). The store's
+        descriptions are compared by a scratch script until R2.5's
+        ref-aware comparison takes them in.
       - Exit: Jisei's init runs every statement with no error and no
         placeholder touched on an init path, and each registry either
         matches the oracle's or lists its differences.

@@ -134,6 +134,12 @@
   sentinel values (a float, a tuple of distinct values, None, "left", a
   colour, a file name, True) and reading back every affected property
   recovers the rules exactly: element sources, constants, conversions.
+- **SKILL-022: One table, two interpreters.** To compare objects from two
+  runtimes (Ren'Py on CPython 2/3, the shim on MicroPython), declare which
+  attributes define each kind once, as data, and give each runtime a small
+  generic walker over that table. The comparison is then about values, and
+  adding a kind is one line, not two hand-written converters that can
+  disagree with each other.
 - **SKILL-012: Spike on the real target early,** with go/no-go numbers set in
   advance, and keep the spike's code (`spikes/hardware/`) so the numbers can
   be reproduced.
