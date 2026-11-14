@@ -200,3 +200,10 @@ def test_signature_markers(signature, source):
          "labels": {}, "images": {}}
     b = Bundle(build(h).write())
     assert b.code(b.node(0).fields["parameters"]) == (source, "parameters")
+
+
+def test_ren_py_6_define_without_a_store():
+    h = {"nodes": [node("Define", {"varname": "Rol", "code": {"code": "None", "mode": "eval"}})],
+         "labels": {}, "images": {}}
+    b = Bundle(build(h).write())
+    assert b.node(0).fields["store"] == "store"

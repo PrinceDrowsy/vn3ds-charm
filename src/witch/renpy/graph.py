@@ -117,6 +117,7 @@ class _Graph:
         f = n["fields"]
         c = n["class"]
         atl = {"atl"} if f.get("atl") else set()
+        store = f.get("store") or "store"  # Ren'Py 6.15 had only the one store
         if c == "Label":
             return "label", set(), {"name": n["name"], "parameters": self.parameters(f.get("parameters"))}
         if c in ("Say", "TranslateSay"):
@@ -168,7 +169,7 @@ class _Graph:
             return "while", set(), {"condition": self.code(f["condition"]), "block": _first(f["block"])}
         if c in ("Python", "EarlyPython"):
             kind = "python" if c == "Python" else "early_python"
-            return kind, {"hide"} if f.get("hide") else set(), {"code": self.code(f["code"]), "store": f["store"]}
+            return kind, {"hide"} if f.get("hide") else set(), {"code": self.code(f["code"]), "store": store}
         if c == "Pass":
             return "pass", set(), {}
         if c == "UserStatement":
@@ -186,15 +187,15 @@ class _Graph:
         if c == "Init":
             return "init", set(), {"priority": f["priority"], "block": _first(f["block"])}
         if c == "Define":
-            return "define", set(), {"store": f["store"], "varname": f["varname"],
+            return "define", set(), {"store": store, "varname": f["varname"],
                                      "operator": f.get("operator") or "=", "index": self.code(f.get("index")),
                                      "code": self.code(f["code"])}
         if c == "Default":
-            return "default", set(), {"store": f["store"], "varname": f["varname"], "code": self.code(f["code"])}
+            return "default", set(), {"store": store, "varname": f["varname"], "code": self.code(f["code"])}
         if c == "Image":
             return "image", atl, {"name": list(f["imgname"]), "code": self.code(f.get("code"))}
         if c == "Transform":
-            return "transform", atl, {"store": f.get("store") or "store", "varname": f["varname"],
+            return "transform", atl, {"store": store, "varname": f["varname"],
                                       "parameters": self.parameters(f.get("parameters"))}
         if c == "Style":
             return "style", set(), {"name": f.get("style_name") or "", "parent": f.get("parent") or ""}
