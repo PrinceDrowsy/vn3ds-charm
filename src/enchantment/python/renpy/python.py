@@ -5,6 +5,8 @@ containers here, where their minstore imports them from."""
 import builtins
 import sys
 
+import pyrandom
+
 from renpy import missing_attribute
 from renpy.revertable import (RevertableDict, RevertableList, RevertableObject, RevertableSet,  # noqa: F401
                               revertable_range, revertable_sorted)
@@ -65,6 +67,37 @@ def py_eval(source, globals=None, locals=None):
     # Ren'Py wraps literals in code compiled at run time too; without a
     # parser on the device, run-time strings are evaluated as they are.
     return store_eval(source, globals, locals)
+
+
+class DetRandom(pyrandom.Random):
+    """renpy.random. Ren'Py logs every number it draws so rollback can
+    replay them; D19's snapshots keep the generator's state instead, so
+    only the pushback stack remains."""
+
+    def __init__(self):
+        super(DetRandom, self).__init__()
+        self.stack = []
+
+    def random(self):
+        if self.stack:
+            return self.stack.pop()
+        return super(DetRandom, self).random()
+
+    def pushback(self, l):
+        ll = l[:]
+        ll.reverse()
+        self.stack.extend(ll)
+
+    def reset(self):
+        self.stack = []
+
+    def Random(self, seed=None):
+        new = DetRandom()
+        new.seed(seed)
+        return new
+
+
+rng = DetRandom()
 
 
 def py_compile(source, mode, filename='<none>', lineno=1, ast_node=False, cache=True):

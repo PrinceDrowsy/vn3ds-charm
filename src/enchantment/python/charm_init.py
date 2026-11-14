@@ -16,6 +16,7 @@ sys.path.append("convert")
 
 import _charm  # noqa: E402
 import charm_stdlib  # noqa: E402
+import pyrandom  # noqa: E402
 import renpy  # noqa: E402
 from renpy import missing, py2, revertable  # noqa: E402
 from renpy.python import StoreModule, create_store, store_dicts  # noqa: E402
@@ -289,6 +290,7 @@ def main(program_path, result_path):
     charm_stdlib.install()
     if program["py2"]:
         revertable.PY2 = True
+        pyrandom.PY2 = True
         py2.install(builtins)
 
     errors = []

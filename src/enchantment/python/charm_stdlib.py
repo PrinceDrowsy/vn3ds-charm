@@ -5,6 +5,8 @@ that adds the missing pieces and passes everything else through.
 - os: environ (a game on the 3DS has no environment variables, so it's
   empty) and path (stdlib/ospath.py).
 - collections: defaultdict, which MicroPython only has in micropython-lib.
+- random: stdlib/pyrandom.py, CPython's Random (MicroPython's random has
+  only getrandbits and seed).
 
 Modules with no place on the device (the updater's tarfile, threads, urllib, subprocess, zlib and codecs, the PC
 engine's pygame_sdl2) are placeholders that report each use.
@@ -82,6 +84,8 @@ def install():
     for name in _ABSENT_MODULES:
         sys.modules[name] = MissingModule(name)
     import ospath
+    import pyrandom
+    sys.modules["random"] = pyrandom
     sys.modules["os"] = _Proxy(_os, environ={}, path=ospath)
     sys.modules["os.path"] = ospath
     sys.modules["collections"] = _Proxy(_collections, defaultdict=defaultdict)
