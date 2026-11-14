@@ -405,6 +405,11 @@ init 999999 python:
             # What Ren'Py does while loading the script, before init: which
             # statements have an early_execute (each creates its store), and
             # the config variables a `define` sets then too.
+            def atl_type(t):
+                if isinstance(t, builtins.tuple):
+                    return [atl_type(i) for i in t]
+                return getattr(t, "name", None) or t.__name__
+
             early = {
                 "classes": sorted(name for name, cls in vars(renpy.ast).items()
                                   if isinstance(cls, type) and issubclass(cls, renpy.ast.Node)
@@ -418,6 +423,8 @@ init 999999 python:
                                  if hasattr(renpy, flag)),
                 "files": renpy.exports.list_files(),
                 "common_files": renpy.exports.list_files(True),
+                # ATL's transform properties and the type of each, by name.
+                "atl_properties": dict((k, atl_type(v)) for k, v in renpy.atl.PROPERTIES.items()),
             }
             f.write('"python": %s,\n"initcode": %s,\n"modules": %s,\n"renpy_modules": %s,\n"style_tables": %s,\n'
                     '"early": %s,\n"config": ' % (json.dumps(python), json.dumps(initcode), json.dumps(modules),
