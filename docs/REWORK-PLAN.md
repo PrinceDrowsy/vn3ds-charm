@@ -917,6 +917,29 @@ The old pipeline is frozen (D22).
     CPython, Jisei first.
   - Exit: all of Jisei's reachable Python runs unmodified, and its snapshot
     matches a full on-device init.
+  - Jisei inventory (2026-11-14): 6,134 game snippets, 6,745 lines, all
+    valid Python 3 syntax and none using Python 2-only semantics (`/`,
+    `iteritems`, `unicode`…). Its init leans on Ren'Py's own library
+    (`Gallery`, `MusicRoom`, `theme`, `build`, `anim`, `config`), which is
+    Python in `renpy/common`. So init runs Ren'Py's common code and the
+    game's together, each game with its own Ren'Py version's common code,
+    and the shim replaces only the engine underneath (`renpy.display`,
+    `renpy.ui`, …).
+  - Steps:
+    - **R2.1 Harvest the oracle:** Ren'Py's init order (`script.initcode`),
+      its compile flags and which snippets needed the old ones, and the
+      store as Ren'Py left it after init, in a canonical value model.
+    - **R2.2 Normalizer:** Python 2 semantics on Python 3 at the AST level
+      (integer `/` without the `division` flag, dict views and `map`/`zip`
+      lists, `has_key`/`iter*`, py2 builtins and `round`), tested against
+      the corpus.
+    - **R2.3 Init runner:** MicroPython's desktop build runs a game's init
+      (common + game, in Ren'Py's order) on the shim, as Witch's D18 step.
+    - **R2.4 Shim:** grown until Jisei's init runs; every missing API is
+      reported with its call site.
+    - **R2.5 Serializer (D19) and comparison:** MicroPython's store against
+      the oracle, value by value.
+    - **R2.6 On device:** a full init on Old 3DS matches the snapshot.
 - **R3 — Engine core: Jisei on hardware.**
   - Platform layers (3DS + desktop); VM; scene model; renderer with TEV
     effects; render targets; transitions; ATL VM; text; audio; saves and
